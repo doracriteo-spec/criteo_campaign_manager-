@@ -143,7 +143,7 @@ export async function processUpload(
         if (error) throw error;
         adSetId = newAdSet.id;
       }
-      adSetMap.set(adSetName, adSetId);
+      adSetMap.set(adSetName, adSetId as string);
     }
 
     // Upsert Daily Metrics
