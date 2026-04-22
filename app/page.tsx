@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
 import { analyzeCampaign, AnalysisResult, CampaignContext } from '../lib/analyzer';
 import Dashboard from './components/Dashboard';
+import Auth from './components/Auth';
+import { supabase } from '../lib/supabase';
+import { processUpload } from '../lib/db';
+import { User } from '@supabase/supabase-js';
 
 const KPI_OPTIONS = [
   'ROAS / Revenue',
@@ -14,6 +18,9 @@ const KPI_OPTIONS = [
 ];
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const [step, setStep] = useState<'upload' | 'config' | 'analysis'>('upload');
   const [csvData, setCsvData] = useState<Record<string, unknown>[]>([]);
   const [csvFileName, setCsvFileName] = useState('');
@@ -31,6 +38,19 @@ export default function Home() {
     start_date: '',
     end_date: '',
   });
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) return;
@@ -53,15 +73,36 @@ export default function Home() {
     if (file) handleFile(file);
   }, [handleFile]);
 
-  const runAnalysis = () => {
+  const runAnalysis = async () => {
+    if (!user) return;
     setAnalyzing(true);
-    setTimeout(() => {
+    try {
       const result = analyzeCampaign(config, csvData);
+      
+      // Save hierarchically to Supabase (User > Advertiser > Campaign > AdSets > Metrics)
+      await processUpload(user.id, config, result, csvData);
+      
       setAnalysis(result);
       setStep('analysis');
+    } catch (error) {
+      console.error('Error during analysis or DB sync', error);
+      alert('There was an error saving campaign data. Check the console.');
+    } finally {
       setAnalyzing(false);
-    }, 1500);
+    }
   };
+
+  if (authLoading) {
+    return (
+      <main className="main-content fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="loading-spinner" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   if (step === 'analysis' && analysis) {
     return (
@@ -152,7 +193,7 @@ export default function Home() {
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
                 <button className="btn btn-secondary" onClick={() => setStep('upload')}>Back</button>
                 <button className="btn btn-primary" disabled={analyzing || !config.account_name || !config.total_budget || !config.start_date || !config.end_date} onClick={runAnalysis}>
-                  {analyzing ? (<><span className="loading-spinner" style={{ width: 18, height: 18, margin: 0, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} /> Analyzing...</>) : '🚀 Run Analysis'}
+                  {analyzing ? (<><span className="loading-spinner" style={{ width: 18, height: 18, margin: 0, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} /> Analyzing & Saving...</>) : '🚀 Run Analysis'}
                 </button>
               </div>
             </div>
