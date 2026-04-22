@@ -17,11 +17,16 @@ export default function Auth() {
       <div className="card" style={{ maxWidth: 400, width: '100%', textAlign: 'center', padding: '48px 32px' }}>
         <div style={{ marginBottom: 32 }}>
           <div className="upload-icon" style={{ width: 64, height: 64, margin: '0 auto 16px' }}>
-            <img 
-              src="https://upload.wikimedia.org/wikipedia/commons/2/21/Criteo_logo.svg" 
-              alt="Criteo" 
-              height="24" 
-            />
+            <div style={{
+              fontWeight: 900,
+              fontSize: '32px',
+              letterSpacing: '-1.5px',
+              color: 'var(--criteo-orange)',
+              fontFamily: 'Inter, sans-serif',
+              lineHeight: 1
+            }}>
+              CRITEO
+            </div>
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>Welcome Back</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Sign in to manage your campaigns and analytics.</p>

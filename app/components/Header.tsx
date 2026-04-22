@@ -26,11 +26,16 @@ export default function Header() {
   return (
     <header className="header">
       <div className="header-logo">
-        <img 
-          src="https://upload.wikimedia.org/wikipedia/commons/2/21/Criteo_logo.svg" 
-          alt="Criteo" 
-          height="28" 
-        />
+        <div style={{
+          fontWeight: 900,
+          fontSize: '28px',
+          letterSpacing: '-1.5px',
+          color: 'var(--criteo-orange)',
+          fontFamily: 'Inter, sans-serif',
+          lineHeight: 1
+        }}>
+          CRITEO
+        </div>
         <div>
           <div className="header-title">Campaign Manager</div>
           <div className="header-subtitle">Performance Analytics</div>
