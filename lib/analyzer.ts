@@ -41,6 +41,7 @@ export interface Recommendation {
 }
 
 export interface AnalysisResult {
+  account_name: string;
   health_summary: string;
   pacing: PacingAnalysis;
   kpi_performance: KPIPerformance;
@@ -48,6 +49,16 @@ export interface AnalysisResult {
   recommendations: Recommendation[];
   daily_data: { date: string; spend: number; kpi_value: number }[];
   optimizer_type: string;
+}
+
+export interface BulkAnalysisResult {
+  results: AnalysisResult[];
+  summary: {
+    total_accounts: number;
+    total_spend: number;
+    total_budget: number;
+    overall_pacing: number;
+  };
 }
 
 function detectOptimizer(rows: Record<string, unknown>[]): string {
@@ -251,6 +262,7 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
   healthParts.push(`Optimizer: ${optimizer}.`);
 
   return {
+    account_name: ctx.account_name,
     health_summary: healthParts.join(' '),
     pacing,
     kpi_performance: { kpi_name: ctx.kpi, kpi_value: kpiValue, kpi_trend: kpiTrend, secondary_metrics: secondaryMetrics },
@@ -258,5 +270,51 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
     recommendations,
     daily_data: dailyData,
     optimizer_type: optimizer,
+  };
+}
+
+export function bulkAnalyzeCampaigns(ctx: CampaignContext, rows: Record<string, unknown>[]): BulkAnalysisResult {
+  const cols = Object.keys(rows[0] || {});
+  const advertiserCol = findColumn(cols, ['advertiser', 'account', 'client', 'customer']);
+
+  if (!advertiserCol) {
+    // Fallback to single account analysis
+    const result = analyzeCampaign(ctx, rows);
+    return {
+      results: [result],
+      summary: {
+        total_accounts: 1,
+        total_spend: result.pacing.actual_spend,
+        total_budget: ctx.total_budget,
+        overall_pacing: result.pacing.pacing_ratio,
+      }
+    };
+  }
+
+  // Group by advertiser
+  const groups: Record<string, Record<string, unknown>[]> = {};
+  for (const row of rows) {
+    const name = String(row[advertiserCol] || 'Unknown Account');
+    if (!groups[name]) groups[name] = [];
+    groups[name].push(row);
+  }
+
+  const results = Object.entries(groups).map(([name, groupRows]) => {
+    // If budget/dates are in the CSV per account, we'd extract them here.
+    // For now, we use the global context but update the name.
+    return analyzeCampaign({ ...ctx, account_name: name }, groupRows);
+  });
+
+  const totalSpend = results.reduce((s, r) => s + r.pacing.actual_spend, 0);
+  const totalBudget = results.length * ctx.total_budget; // Assuming budget is per account if global
+  
+  return {
+    results,
+    summary: {
+      total_accounts: results.length,
+      total_spend: Math.round(totalSpend * 100) / 100,
+      total_budget: totalBudget,
+      overall_pacing: totalBudget > 0 ? Math.round((totalSpend / totalBudget) * 100) / 100 : 0,
+    }
   };
 }

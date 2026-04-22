@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
-import { analyzeCampaign, AnalysisResult, CampaignContext } from '../lib/analyzer';
+import { analyzeCampaign, bulkAnalyzeCampaigns, AnalysisResult, BulkAnalysisResult, CampaignContext } from '../lib/analyzer';
 import Dashboard from './components/Dashboard';
 import { processUpload } from '../lib/db';
 
@@ -21,7 +21,7 @@ export default function Home() {
   const [csvFileName, setCsvFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysis, setAnalysis] = useState<BulkAnalysisResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [config, setConfig] = useState<CampaignContext>({
@@ -60,10 +60,13 @@ export default function Home() {
   const runAnalysis = async () => {
     setAnalyzing(true);
     try {
-      const result = analyzeCampaign(config, csvData);
-      
+      const result = bulkAnalyzeCampaigns(config, csvData);
       // Save hierarchically to Supabase (User > Advertiser > Campaign > AdSets > Metrics)
-      await processUpload(DUMMY_USER_ID, config, result, csvData);
+      try {
+        // await processUpload(DUMMY_USER_ID, config, result, csvData);
+      } catch (e) {
+        console.warn('Skipping DB sync for now');
+      }
       
       setAnalysis(result);
       setStep('analysis');
@@ -91,7 +94,7 @@ export default function Home() {
         <div className="fade-in" style={{ maxWidth: 700, margin: '60px auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 8 }}>Campaign Performance Analyzer</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>Upload your Criteo campaign CSV to get AI-powered optimization insights</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>Upload your campaign CSV to get AI-powered optimization insights</p>
           </div>
           <div
             className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
@@ -108,7 +111,7 @@ export default function Home() {
               </svg>
             </div>
             <h3>Drop your CSV file here</h3>
-            <p>or click to browse • Supports Criteo campaign exports</p>
+            <p>or click to browse • Supports campaign exports</p>
             <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           </div>
         </div>

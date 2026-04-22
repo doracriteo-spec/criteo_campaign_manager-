@@ -1,17 +1,21 @@
 'use client';
 
-import { AnalysisResult, CampaignContext } from '../../lib/analyzer';
+import { useState } from 'react';
+import { AnalysisResult, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
 import SpendChart from './SpendChart';
 
 interface DashboardProps {
-  analysis: AnalysisResult;
+  analysis: BulkAnalysisResult;
   config: CampaignContext;
   csvFileName: string;
   onReset: () => void;
 }
 
 export default function Dashboard({ analysis, config, csvFileName, onReset }: DashboardProps) {
-  const { pacing, kpi_performance, risks, recommendations, daily_data, health_summary, optimizer_type } = analysis;
+  const [selectedAccountIndex, setSelectedAccountIndex] = useState(0);
+  const currentAnalysis = analysis.results[selectedAccountIndex];
+  
+  const { pacing, kpi_performance, risks, recommendations, daily_data, health_summary, optimizer_type, account_name } = currentAnalysis;
 
   const pacingClass = pacing.pacing_ratio > 1.1 ? 'overpacing' : pacing.pacing_ratio < 0.9 ? 'underpacing' : '';
   const pacingBadge = pacing.pacing_status.includes('Under')
@@ -24,14 +28,35 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
   return (
     <div>
       {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>{config.account_name}</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 300 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>
+            {analysis.results.length > 1 ? (
+              <select 
+                className="form-select" 
+                style={{ fontSize: 24, fontWeight: 800, border: 'none', padding: 0, background: 'transparent', width: 'auto', cursor: 'pointer' }}
+                value={selectedAccountIndex}
+                onChange={(e) => setSelectedAccountIndex(parseInt(e.target.value))}
+              >
+                {analysis.results.map((r, i) => (
+                  <option key={i} value={i}>{r.account_name}</option>
+                ))}
+              </select>
+            ) : account_name}
+          </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
-            {config.region} • {csvFileName} • {optimizer_type}
+            {config.region} • {csvFileName} • {optimizer_type} 
+            {analysis.results.length > 1 && ` • Account ${selectedAccountIndex + 1} of ${analysis.results.length}`}
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={onReset}>← New Analysis</button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          {analysis.results.length > 1 && (
+            <div className="badge badge-info" style={{ alignSelf: 'center', padding: '8px 12px' }}>
+              Bulk Mode: {analysis.summary.total_accounts} Accounts
+            </div>
+          )}
+          <button className="btn btn-secondary" onClick={onReset}>← New Analysis</button>
+        </div>
       </div>
 
       {/* Health Summary */}
