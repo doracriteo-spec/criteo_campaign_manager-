@@ -1,15 +1,31 @@
 'use client';
 
+import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
 export default function Auth() {
-  const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    // First, try to sign in
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    
+    // If invalid credentials, they might not exist yet. Let's auto-signup to make it easy.
+    if (error && error.message.includes('Invalid login')) {
+      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+      if (signUpError) {
+        alert(signUpError.message);
+      }
+    } else if (error) {
+      alert(error.message);
+    }
+    
+    setLoading(false);
   };
 
   return (
@@ -29,17 +45,36 @@ export default function Auth() {
             </div>
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>Welcome Back</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Sign in to manage your campaigns and analytics.</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Sign in or create an account to manage your campaigns.</p>
         </div>
         
-        <button 
-          onClick={handleGoogleLogin}
-          className="btn btn-secondary" 
-          style={{ width: '100%', justifyContent: 'center', padding: '12px 16px', fontSize: 15 }}
-        >
-          <img src="https://www.google.com/favicon.ico" alt="Google" style={{ width: 18, height: 18 }} />
-          Continue with Google
-        </button>
+        <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <input
+            type="email"
+            placeholder="Email address"
+            className="form-input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="form-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+          <button 
+            type="submit"
+            disabled={loading}
+            className="btn btn-primary" 
+            style={{ width: '100%', justifyContent: 'center', padding: '12px 16px', fontSize: 15 }}
+          >
+            {loading ? 'Authenticating...' : 'Sign In / Sign Up'}
+          </button>
+        </form>
       </div>
     </div>
   );
