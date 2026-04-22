@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { AnalysisResult, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
+import { useState, useMemo } from 'react';
+import { AnalysisNode, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
 import SpendChart from './SpendChart';
 
 interface DashboardProps {
@@ -20,11 +20,28 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 export default function Dashboard({ analysis, config, csvFileName, onReset }: DashboardProps) {
-  const [selectedAccountIndex, setSelectedAccountIndex] = useState(0);
-  const isMultiAccount = analysis.results.length > 1;
-  const currentAnalysis = analysis.results[selectedAccountIndex];
+  // Flat list of all nodes for easy selection
+  const allNodes = useMemo(() => {
+    const list: AnalysisNode[] = [];
+    const traverse = (nodes: AnalysisNode[]) => {
+      nodes.forEach(node => {
+        list.push(node);
+        if (node.children) traverse(node.children);
+      });
+    };
+    traverse(analysis.nodes);
+    return list;
+  }, [analysis.nodes]);
 
-  const { pacing, kpi_performance, risks, recommendations, pacing_recommendations, daily_data, health_summary, optimizer_type, account_name, row_count, campaign_names } = currentAnalysis;
+  const [selectedNodeId, setSelectedNodeId] = useState<string>(allNodes[0]?.id || '');
+  
+  const currentNode = useMemo(() => {
+    return allNodes.find(n => n.id === selectedNodeId) || allNodes[0];
+  }, [allNodes, selectedNodeId]);
+
+  if (!currentNode) return null;
+
+  const { pacing, kpi_performance, risks, recommendations, pacing_recommendations, daily_data, health_summary, optimizer_type, name, level, row_count } = currentNode;
 
   const hasBudget = pacing.has_budget;
   const pacingClass = hasBudget ? (pacing.pacing_ratio > 1.1 ? 'overpacing' : pacing.pacing_ratio < 0.9 ? 'underpacing' : '') : '';
@@ -37,101 +54,91 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
   const trendIcon = kpi_performance.kpi_trend === 'Improving' ? '↑' : kpi_performance.kpi_trend === 'Declining' ? '↓' : '→';
   const trendBadge = kpi_performance.kpi_trend === 'Improving' ? 'badge-success' : kpi_performance.kpi_trend === 'Declining' ? 'badge-danger' : 'badge-info';
 
-  return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-      {/* Sidebar — Advertiser List (only for multi-account) */}
-      {isMultiAccount && (
-        <div className="fade-in" style={{ width: 260, flexShrink: 0, position: 'sticky', top: 80 }}>
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <div className="card-header" style={{ padding: '16px 20px' }}>
-              <span className="card-title" style={{ fontSize: 13 }}>Advertisers ({analysis.summary.total_accounts})</span>
+  const renderSidebarNode = (node: AnalysisNode, depth: number = 0) => {
+    const isSelected = node.id === selectedNodeId;
+    return (
+      <div key={node.id}>
+        <div
+          onClick={() => setSelectedNodeId(node.id)}
+          style={{
+            padding: `12px 16px 12px ${16 + depth * 16}px`,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            borderBottom: '1px solid var(--border-light)',
+            background: isSelected ? 'var(--bg-card-hover)' : 'transparent',
+            borderLeft: isSelected ? '3px solid var(--criteo-orange)' : '3px solid transparent',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <div style={{ fontSize: 14, flexShrink: 0 }}>
+            {node.level === 'advertiser' ? '🏢' : node.level === 'campaign' ? '📦' : '🎯'}
+          </div>
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{
+              fontWeight: isSelected ? 700 : 500,
+              fontSize: 12,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+            }}>
+              {node.name}
             </div>
-            <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
-              {analysis.results.map((r, i) => (
-                <div
-                  key={i}
-                  onClick={() => setSelectedAccountIndex(i)}
-                  style={{
-                    padding: '14px 20px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    borderBottom: '1px solid var(--border-light)',
-                    background: i === selectedAccountIndex ? 'var(--bg-card-hover)' : 'transparent',
-                    borderLeft: i === selectedAccountIndex ? '3px solid var(--criteo-orange)' : '3px solid transparent',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: '50%',
-                    background: `hsl(${(i * 47) % 360}, 65%, 55%)`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0
-                  }}>
-                    {r.account_name.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ overflow: 'hidden' }}>
-                    <div style={{
-                      fontWeight: i === selectedAccountIndex ? 700 : 500,
-                      fontSize: 13,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      color: i === selectedAccountIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    }}>
-                      {r.account_name}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {r.row_count} rows • {config.currency}{r.pacing.actual_spend.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Summary Footer */}
-            <div style={{ padding: '14px 20px', borderTop: '2px solid var(--border)', background: 'var(--bg-primary)' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Total All Accounts</div>
-              <div style={{ fontSize: 16, fontWeight: 800 }}>{config.currency}{analysis.summary.total_spend.toLocaleString()}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{analysis.summary.total_rows} total rows</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              {config.currency}{node.pacing.actual_spend.toLocaleString()}
             </div>
           </div>
         </div>
-      )}
+        {node.children && node.children.map(child => renderSidebarNode(child, depth + 1))}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+      {/* Sidebar — Hierarchy View */}
+      <div className="fade-in" style={{ width: 280, flexShrink: 0, position: 'sticky', top: 80 }}>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="card-header" style={{ padding: '16px 20px' }}>
+            <span className="card-title" style={{ fontSize: 13 }}>Hierarchy View</span>
+          </div>
+          <div style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+            {analysis.nodes.map(node => renderSidebarNode(node))}
+          </div>
+          <div style={{ padding: '14px 20px', borderTop: '2px solid var(--border)', background: 'var(--bg-primary)' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Portfolio Total</div>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>{config.currency}{analysis.summary.total_spend.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{analysis.summary.total_rows} total rows</div>
+          </div>
+        </div>
+        <button className="btn btn-secondary" style={{ width: '100%', marginTop: 16, justifyContent: 'center' }} onClick={onReset}>
+          ← New Analysis
+        </button>
+      </div>
 
       {/* Main Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Top bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, gap: 16 }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>{account_name}</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
-              {config.region && `${config.region} • `}{csvFileName} • {optimizer_type} • {row_count} rows
-              {campaign_names.length > 0 && ` • ${campaign_names.length} campaign${campaign_names.length !== 1 ? 's' : ''}`}
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span className="badge badge-info" style={{ textTransform: 'uppercase', fontSize: 10 }}>{level}</span>
+                {currentNode.parent_name && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>under {currentNode.parent_name}</span>}
+             </div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em' }}>{name}</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
+              {csvFileName} • {optimizer_type} • {row_count} rows
             </p>
           </div>
-          <button className="btn btn-secondary" onClick={onReset}>← New Analysis</button>
         </div>
 
         {/* Health Summary */}
         <div className="health-summary fade-in">
-          <h2>📊 Campaign Health Summary</h2>
+          <h2>📊 {level.charAt(0).toUpperCase() + level.slice(1)} Health Summary</h2>
           <p>{health_summary}</p>
         </div>
-
-        {/* Campaign Names (if detected) */}
-        {campaign_names.length > 0 && (
-          <div className="fade-in" style={{ marginBottom: 24, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {campaign_names.slice(0, 10).map((cn, i) => (
-              <span key={i} className="badge badge-info" style={{ fontSize: 11, padding: '4px 10px' }}>{cn}</span>
-            ))}
-            {campaign_names.length > 10 && (
-              <span className="badge" style={{ background: 'var(--border-light)', color: 'var(--text-muted)', fontSize: 11, padding: '4px 10px' }}>
-                +{campaign_names.length - 10} more
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Stat Cards */}
         <div className="stats-grid fade-in fade-in-delay-1">
@@ -140,7 +147,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
             <div className="stat-value">{config.currency}{pacing.actual_spend.toLocaleString()}</div>
             <div className="stat-sub">
               {hasBudget
-                ? `of ${config.currency}${config.total_budget.toLocaleString()} budget`
+                ? `of ${config.currency}${pacing.expected_spend.toLocaleString()} expected`
                 : `${config.currency}${(pacing.elapsed_days > 0 ? pacing.actual_spend / pacing.elapsed_days : 0).toFixed(2)}/day avg`
               }
             </div>
@@ -156,9 +163,9 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
             <div className="stat-sub"><span className={`badge ${trendBadge}`}>{trendIcon} {kpi_performance.kpi_trend}</span></div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Data Points</div>
-            <div className="stat-value">{pacing.total_days > 0 ? `${pacing.elapsed_days}/${pacing.total_days}` : row_count}</div>
-            <div className="stat-sub">{pacing.remaining_days > 0 ? `${pacing.remaining_days} days remaining` : `${row_count} rows analyzed`}</div>
+            <div className="stat-label">Timeline</div>
+            <div className="stat-value">{pacing.total_days > 0 ? `${pacing.elapsed_days}/${pacing.total_days}` : '—'}</div>
+            <div className="stat-sub">{pacing.remaining_days > 0 ? `${pacing.remaining_days} days left` : 'Flight period ended'}</div>
           </div>
         </div>
 
@@ -212,11 +219,11 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
           </div>
         </div>
 
-        {/* Pacing Recommendations (NEW) */}
+        {/* Optimization Recommendations */}
         {pacing_recommendations.length > 0 && (
           <div className="card fade-in fade-in-delay-3" style={{ marginBottom: 24 }}>
             <div className="card-header">
-              <span className="card-title">⚡ Pacing Optimization Recommendations</span>
+              <span className="card-title">⚡ {level.charAt(0).toUpperCase() + level.slice(1)} Optimization Recommendations</span>
               <span className="badge badge-info">{pacing_recommendations.length} suggestions</span>
             </div>
             <div className="card-body">
@@ -226,11 +233,9 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
                     {CATEGORY_ICONS[rec.category || 'general']}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <div className="rec-action">{rec.action}</div>
-                    </div>
+                    <div className="rec-action">{rec.action}</div>
                     <div className="rec-reason">{rec.reason}</div>
-                    <div className="rec-impact" style={{ display: 'flex', gap: 8 }}>
+                    <div className="rec-impact" style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                       <span className={`badge ${rec.impact === 'High' ? 'badge-danger' : rec.impact === 'Medium' ? 'badge-warning' : 'badge-info'}`}>
                         {rec.impact} Impact
                       </span>
@@ -247,9 +252,9 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
           </div>
         )}
 
-        {/* Risks + General Recommendations */}
-        <div className="dashboard-grid fade-in fade-in-delay-4">
-          <div className="card">
+        {/* Risks */}
+        {risks.length > 0 && (
+          <div className="card fade-in fade-in-delay-4">
             <div className="card-header"><span className="card-title">⚠️ Key Risks</span></div>
             <div className="card-body">
               {risks.map((risk, i) => (
@@ -263,26 +268,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
               ))}
             </div>
           </div>
-          <div className="card">
-            <div className="card-header"><span className="card-title">🎯 Recommended Actions</span></div>
-            <div className="card-body">
-              {recommendations.map((rec, i) => (
-                <div className="rec-item" key={i}>
-                  <div className="rec-number">{rec.priority}</div>
-                  <div>
-                    <div className="rec-action">{rec.action}</div>
-                    <div className="rec-reason">{rec.reason}</div>
-                    <div className="rec-impact">
-                      <span className={`badge ${rec.impact === 'High' ? 'badge-danger' : rec.impact === 'Medium' ? 'badge-warning' : 'badge-info'}`}>
-                        {rec.impact} Impact
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

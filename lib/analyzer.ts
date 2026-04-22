@@ -3,9 +3,10 @@ export interface CampaignContext {
   region: string;
   currency: string;
   kpi: string;
-  total_budget: number;
+  total_budget: number; // fallback/global
   start_date: string;
   end_date: string;
+  ad_set_budgets: Record<string, number>; // key: "Advertiser|Campaign|AdSet", value: budget
 }
 
 export interface PacingAnalysis {
@@ -42,8 +43,14 @@ export interface Recommendation {
   category?: 'pacing' | 'budget' | 'targeting' | 'creative' | 'general';
 }
 
-export interface AnalysisResult {
-  account_name: string;
+export interface AnalysisNode {
+  id: string; // unique ID for selection
+  level: 'advertiser' | 'campaign' | 'ad_set';
+  name: string;
+  advertiser_name: string;
+  campaign_name?: string;
+  parent_name?: string;
+  
   health_summary: string;
   pacing: PacingAnalysis;
   kpi_performance: KPIPerformance;
@@ -53,11 +60,14 @@ export interface AnalysisResult {
   daily_data: { date: string; spend: number; kpi_value: number }[];
   optimizer_type: string;
   row_count: number;
-  campaign_names: string[];
+  
+  children: AnalysisNode[];
 }
 
+export type AnalysisResult = AnalysisNode;
+
 export interface BulkAnalysisResult {
-  results: AnalysisResult[];
+  nodes: AnalysisNode[]; // Root level nodes (advertisers or fallback)
   summary: {
     total_accounts: number;
     total_spend: number;
@@ -65,6 +75,13 @@ export interface BulkAnalysisResult {
     overall_pacing: number;
     total_rows: number;
   };
+}
+
+export interface DetectedHierarchy {
+  advertiser: string;
+  campaign: string;
+  ad_set: string;
+  id: string;
 }
 
 function detectOptimizer(rows: Record<string, unknown>[]): string {
@@ -94,6 +111,31 @@ function num(val: unknown): number {
   return 0;
 }
 
+export function detectHierarchy(rows: Record<string, unknown>[]): DetectedHierarchy[] {
+  const cols = Object.keys(rows[0] || {});
+  const advertiserCol = findColumn(cols, ['advertiser', 'account', 'client', 'customer']);
+  const campaignCol = findColumn(cols, ['campaign', 'campaign_name', 'campaign name']);
+  const adSetCol = findColumn(cols, ['ad set', 'adset', 'ad_set', 'adgroup', 'ad group']);
+
+  const map = new Map<string, DetectedHierarchy>();
+
+  for (const row of rows) {
+    const adv = advertiserCol ? String(row[advertiserCol] || 'Unknown Advertiser').trim() : 'Default Advertiser';
+    const camp = campaignCol ? String(row[campaignCol] || 'Unknown Campaign').trim() : 'Default Campaign';
+    const adSet = adSetCol ? String(row[adSetCol] || 'Unknown Ad Set').trim() : 'Default Ad Set';
+
+    // Only add if we actually have columns for them, to avoid creating fake hierarchy
+    if (advertiserCol || campaignCol || adSetCol) {
+       const id = `${adv}|${camp}|${adSet}`;
+       if (!map.has(id)) {
+         map.set(id, { advertiser: adv, campaign: camp, ad_set: adSet, id });
+       }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 function generatePacingRecommendations(
   pacingRatio: number,
   hasBudget: boolean,
@@ -104,92 +146,72 @@ function generatePacingRecommendations(
   totalRevenue: number,
   kpiTrend: string,
   dailyRunRate: number,
-  ctx: CampaignContext
+  ctx: CampaignContext,
+  level: string
 ): Recommendation[] {
   const recs: Recommendation[] = [];
+  const entityName = level === 'ad_set' ? 'ad set' : level === 'campaign' ? 'campaign' : 'advertiser';
 
   if (hasBudget && pacingRatio < 0.9) {
-    // Underpacing recommendations
     recs.push({
       priority: 1,
-      action: 'Increase daily budget caps by 20-30%',
-      reason: `Current pacing at ${Math.round(pacingRatio * 100)}% indicates significant underdelivery. Raising budget caps allows the algorithm to find more eligible impressions.`,
+      action: `Increase daily budget caps by 20-30% for this ${entityName}`,
+      reason: `Current pacing at ${Math.round(pacingRatio * 100)}% indicates significant underdelivery.`,
       impact: 'High',
       category: 'budget'
     });
-    recs.push({
-      priority: 2,
-      action: 'Lower bid caps or switch to automatic bidding',
-      reason: 'Restrictive bid caps can prevent the optimizer from winning enough auctions. Consider removing manual bid limits to increase delivery volume.',
-      impact: 'High',
-      category: 'pacing'
-    });
-    recs.push({
-      priority: 3,
-      action: 'Expand audience targeting or add new interest segments',
-      reason: 'Narrow targeting limits the available inventory pool. Broaden geo, demographic, or interest targeting to increase reach.',
-      impact: 'Medium',
-      category: 'targeting'
-    });
-    recs.push({
-      priority: 4,
-      action: 'Review frequency capping settings',
-      reason: 'Overly strict frequency caps may limit impressions per user. Consider relaxing caps from 1/day to 3/day to improve delivery.',
-      impact: 'Medium',
-      category: 'pacing'
-    });
-    if (pacingRatio < 0.5) {
+    if (level === 'ad_set') {
       recs.push({
-        priority: 5,
-        action: 'Consider extending flight dates or reallocating budget',
-        reason: `At ${Math.round(pacingRatio * 100)}% pacing, the campaign may not spend its full budget. Consider extending end date or shifting budget to higher-performing campaigns.`,
+        priority: 2,
+        action: 'Expand audience targeting or increase bid caps',
+        reason: 'Narrow targeting or low bids limit inventory for this specific ad set.',
+        impact: 'Medium',
+        category: 'targeting'
+      });
+    } else {
+      recs.push({
+        priority: 2,
+        action: 'Reallocate budget to under-pacing ad sets',
+        reason: 'Shift funds to ad sets with room to scale.',
         impact: 'High',
         category: 'budget'
       });
     }
   } else if (hasBudget && pacingRatio > 1.1) {
-    // Overpacing recommendations
     recs.push({
       priority: 1,
-      action: 'Reduce daily budget caps by 15-25%',
-      reason: `Overpacing at ${Math.round(pacingRatio * 100)}% will exhaust budget before flight end. Tighten daily caps to ensure even distribution.`,
+      action: `Reduce daily budget caps by 15-25% for this ${entityName}`,
+      reason: `Overpacing at ${Math.round(pacingRatio * 100)}% will exhaust budget early.`,
       impact: 'High',
       category: 'budget'
     });
-    recs.push({
-      priority: 2,
-      action: 'Tighten audience targeting to focus on highest-value segments',
-      reason: 'Narrowing targeting reduces impression volume while potentially improving conversion quality.',
-      impact: 'Medium',
-      category: 'targeting'
-    });
-    recs.push({
-      priority: 3,
-      action: 'Implement or increase bid caps',
-      reason: 'Adding manual bid limits prevents the optimizer from overbidding and controls overall spend velocity.',
-      impact: 'Medium',
-      category: 'pacing'
-    });
+    if (level === 'ad_set') {
+      recs.push({
+        priority: 2,
+        action: 'Tighten targeting to focus on highest-value users',
+        reason: 'Reduce impression volume while improving efficiency.',
+        impact: 'Medium',
+        category: 'targeting'
+      });
+    }
   }
 
-  // General pacing recommendations (always relevant)
   if (totalImps > 0 && totalClicks / totalImps < 0.002) {
     recs.push({
       priority: recs.length + 1,
-      action: 'Refresh creatives to improve click-through rate',
-      reason: `CTR of ${((totalClicks / totalImps) * 100).toFixed(2)}% is below industry benchmark. New creatives can unlock more efficient delivery.`,
+      action: `Refresh creatives in this ${entityName}`,
+      reason: `CTR of ${((totalClicks / totalImps) * 100).toFixed(2)}% is below benchmark.`,
       impact: 'Medium',
       category: 'creative'
     });
   }
 
   if (totalConv > 0 && totalSpend > 0) {
-    const cpa = totalSpend / totalConv;
     if (totalRevenue > 0 && totalRevenue / totalSpend < 1) {
       recs.push({
         priority: recs.length + 1,
-        action: 'Optimize toward higher-ROAS audience segments',
-        reason: `Current ROAS of ${(totalRevenue / totalSpend).toFixed(2)}x is below breakeven. Focus spend on proven high-value cohorts.`,
+        action: `Optimize ${entityName} toward higher-ROAS segments`,
+        reason: `Current ROAS is ${(totalRevenue / totalSpend).toFixed(2)}x.`,
         impact: 'High',
         category: 'targeting'
       });
@@ -199,63 +221,29 @@ function generatePacingRecommendations(
   if (!hasBudget) {
     recs.push({
       priority: 1,
-      action: 'Set a total budget to enable pacing analysis',
-      reason: 'Without a defined budget, pacing ratios and spend projections cannot be calculated. Add a budget in the configuration to unlock full optimization insights.',
+      action: `Set a budget for this ${entityName} to enable pacing analysis`,
+      reason: 'Pacing ratios and spend projections require a defined budget.',
       impact: 'Medium',
       category: 'budget'
     });
-    recs.push({
-      priority: 2,
-      action: 'Review daily spend trends for consistency',
-      reason: `Current daily run rate is ${ctx.currency}${dailyRunRate.toFixed(2)}. Ensure this aligns with campaign goals and expected delivery.`,
-      impact: 'Low',
-      category: 'pacing'
-    });
   }
-
-  if (kpiTrend === 'Declining') {
-    recs.push({
-      priority: recs.length + 1,
-      action: 'Implement A/B creative testing to reverse declining performance',
-      reason: 'KPI trend is declining. Rotating in fresh creatives and testing different messaging can help reverse the trend.',
-      impact: 'Medium',
-      category: 'creative'
-    });
-  }
-
-  // Always add a general monitoring recommendation
-  recs.push({
-    priority: recs.length + 1,
-    action: 'Monitor campaign performance daily and adjust bids/budgets in 48-hour cycles',
-    reason: 'Regular monitoring ensures optimizations take effect before making further changes. Allow 48 hours between adjustments for the algorithm to recalibrate.',
-    impact: 'Low',
-    category: 'general'
-  });
 
   return recs;
 }
 
-export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unknown>[]): AnalysisResult {
-  if (!rows.length) {
-    return {
-      account_name: ctx.account_name,
-      health_summary: 'No data available for analysis.',
-      pacing: { elapsed_days: 0, remaining_days: 0, total_days: 0, expected_spend: 0, actual_spend: 0, pacing_ratio: 0, pacing_status: 'No Budget Set', projected_total_spend: 0, projected_underspend: 0, has_budget: false },
-      kpi_performance: { kpi_name: ctx.kpi, kpi_value: 0, kpi_trend: 'Stable', secondary_metrics: {} },
-      risks: [{ severity: 'high', title: 'No Data', description: 'No campaign data was found in the uploaded CSV.' }],
-      recommendations: [{ priority: 1, action: 'Upload valid campaign data', reason: 'Analysis requires at least one row of campaign data.', impact: 'High' }],
-      pacing_recommendations: [],
-      daily_data: [],
-      optimizer_type: 'Unknown',
-      row_count: 0,
-      campaign_names: [],
-    };
-  }
-
-  const cols = Object.keys(rows[0]);
+function processNodeAnalysis(
+  ctx: CampaignContext,
+  rows: Record<string, unknown>[],
+  level: 'advertiser' | 'campaign' | 'ad_set',
+  name: string,
+  id: string,
+  advertiser_name: string,
+  campaign_name?: string,
+  parent_name?: string
+): Omit<AnalysisNode, 'children'> {
+  const cols = Object.keys(rows[0] || {});
   const optimizer = detectOptimizer(rows);
 
-  // Find columns
   const dateCol = findColumn(cols, ['date', 'day', 'period']);
   const spendCol = findColumn(cols, ['spend', 'cost', 'budget_spent', 'amount']);
   const clickCol = findColumn(cols, ['click', 'clicks']);
@@ -263,22 +251,11 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
   const convCol = findColumn(cols, ['conversion', 'conversions', 'sale', 'sales', 'order', 'orders']);
   const revenueCol = findColumn(cols, ['revenue', 'rev', 'value', 'order_value']);
   const visitCol = findColumn(cols, ['visit', 'visits', 'session', 'sessions']);
-  const campaignCol = findColumn(cols, ['campaign', 'campaign_name', 'campaign name']);
 
-  // Extract unique campaign names
-  const campaignNames: string[] = [];
-  if (campaignCol) {
-    const uniqueCampaigns = new Set<string>();
-    for (const row of rows) {
-      const cn = String(row[campaignCol] || '').trim();
-      if (cn && cn !== 'undefined' && cn !== 'null') uniqueCampaigns.add(cn);
-    }
-    campaignNames.push(...Array.from(uniqueCampaigns));
-  }
-
-  // Aggregate totals
   let totalSpend = 0, totalClicks = 0, totalImps = 0, totalConv = 0, totalRevenue = 0, totalVisits = 0;
-  const dailyData: { date: string; spend: number; kpi_value: number }[] = [];
+  
+  // Aggregate daily data
+  const dateMap = new Map<string, { spend: number; kpi_value: number }>();
 
   for (const row of rows) {
     const spend = spendCol ? num(row[spendCol]) : 0;
@@ -297,15 +274,35 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
     else if (kpiLower.includes('click')) kpiVal = clickCol ? num(row[clickCol]) : 0;
     else kpiVal = spend;
 
-    dailyData.push({
-      date: dateCol ? String(row[dateCol]) : `Row ${dailyData.length + 1}`,
-      spend,
-      kpi_value: kpiVal,
-    });
+    const date = dateCol ? String(row[dateCol]) : 'Unknown';
+    if (!dateMap.has(date)) {
+      dateMap.set(date, { spend: 0, kpi_value: 0 });
+    }
+    const d = dateMap.get(date)!;
+    d.spend += spend;
+    d.kpi_value += kpiVal;
   }
 
-  // Pacing — works even if budget/dates are not set
-  const hasBudget = ctx.total_budget > 0;
+  const dailyData = Array.from(dateMap.entries()).map(([date, vals]) => ({ date, ...vals }));
+  if (dateCol) dailyData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Determine Budget
+  let budget = 0;
+  if (level === 'ad_set') {
+    budget = ctx.ad_set_budgets[id] || 0;
+  } else if (level === 'advertiser' && Object.keys(ctx.ad_set_budgets).length === 0) {
+    budget = ctx.total_budget;
+  } else if (level === 'advertiser' || level === 'campaign') {
+    // sum up child ad set budgets if available
+    budget = Object.entries(ctx.ad_set_budgets)
+      .filter(([k]) => k.startsWith(id + '|') || (level==='advertiser' && k.startsWith(advertiser_name + '|')))
+      .reduce((sum, [_, b]) => sum + b, 0);
+    
+    // If no ad set budgets were set, fallback to total_budget for advertiser
+    if (budget === 0 && level === 'advertiser') budget = ctx.total_budget;
+  }
+
+  const hasBudget = budget > 0;
   const hasDates = !!ctx.start_date && !!ctx.end_date;
   
   let elapsedDays = 0, remainingDays = 0, totalDays = 0, expectedSpend = 0, pacingRatio = 0;
@@ -317,24 +314,17 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
     totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
     elapsedDays = Math.max(0, Math.min(totalDays, Math.ceil((now.getTime() - start.getTime()) / 86400000)));
     remainingDays = Math.max(0, totalDays - elapsedDays);
-  } else if (dateCol) {
-    // Try to infer from data
-    const dates = rows.map(r => new Date(String(r[dateCol]))).filter(d => !isNaN(d.getTime())).sort((a, b) => a.getTime() - b.getTime());
-    if (dates.length >= 2) {
-      totalDays = Math.max(1, Math.ceil((dates[dates.length - 1].getTime() - dates[0].getTime()) / 86400000));
-      elapsedDays = totalDays;
-      remainingDays = 0;
-    } else {
-      totalDays = rows.length;
-      elapsedDays = rows.length;
-    }
+  } else if (dateCol && dailyData.length >= 2 && dailyData[0].date !== 'Unknown') {
+    totalDays = dailyData.length;
+    elapsedDays = dailyData.length;
+    remainingDays = 0;
   } else {
-    totalDays = rows.length;
-    elapsedDays = rows.length;
+    totalDays = 1;
+    elapsedDays = 1;
   }
 
   if (hasBudget) {
-    expectedSpend = totalDays > 0 ? (elapsedDays / totalDays) * ctx.total_budget : ctx.total_budget;
+    expectedSpend = totalDays > 0 ? (elapsedDays / totalDays) * budget : budget;
     pacingRatio = expectedSpend > 0 ? totalSpend / expectedSpend : 0;
   }
 
@@ -348,7 +338,7 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
 
   const dailyRunRate = elapsedDays > 0 ? totalSpend / elapsedDays : 0;
   const projectedTotalSpend = dailyRunRate * totalDays;
-  const projectedUnderspend = hasBudget ? Math.max(0, ctx.total_budget - projectedTotalSpend) : 0;
+  const projectedUnderspend = hasBudget ? Math.max(0, budget - projectedTotalSpend) : 0;
 
   const pacing: PacingAnalysis = {
     elapsed_days: elapsedDays,
@@ -371,21 +361,18 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
   if (kpiLower.includes('roas')) {
     kpiValue = totalSpend > 0 ? Math.round((totalRevenue / totalSpend) * 100) / 100 : 0;
     secondaryMetrics['Total Revenue'] = Math.round(totalRevenue * 100) / 100;
-    secondaryMetrics['Total Spend'] = Math.round(totalSpend * 100) / 100;
   } else if (kpiLower.includes('revenue')) {
     kpiValue = Math.round(totalRevenue * 100) / 100;
     secondaryMetrics['ROAS'] = totalSpend > 0 ? Math.round((totalRevenue / totalSpend) * 100) / 100 : 0;
   } else if (kpiLower.includes('sale') || kpiLower.includes('conversion')) {
     kpiValue = totalConv;
     secondaryMetrics['CPA'] = totalConv > 0 ? Math.round((totalSpend / totalConv) * 100) / 100 : 0;
-    secondaryMetrics['Conv. Rate'] = totalClicks > 0 ? Math.round((totalConv / totalClicks) * 10000) / 100 : 0;
   } else if (kpiLower.includes('visit')) {
     kpiValue = totalVisits;
     secondaryMetrics['Cost per Visit'] = totalVisits > 0 ? Math.round((totalSpend / totalVisits) * 100) / 100 : 0;
   } else if (kpiLower.includes('click')) {
     kpiValue = totalClicks;
     secondaryMetrics['CPC'] = totalClicks > 0 ? Math.round((totalSpend / totalClicks) * 100) / 100 : 0;
-    secondaryMetrics['CTR'] = totalImps > 0 ? Math.round((totalClicks / totalImps) * 10000) / 100 : 0;
   } else {
     kpiValue = totalSpend;
   }
@@ -393,9 +380,7 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
   secondaryMetrics['Impressions'] = totalImps;
   secondaryMetrics['Clicks'] = totalClicks;
   if (totalConv > 0) secondaryMetrics['Conversions'] = totalConv;
-  if (totalRevenue > 0) secondaryMetrics['Revenue'] = Math.round(totalRevenue * 100) / 100;
   if (!secondaryMetrics['CTR'] && totalImps > 0) secondaryMetrics['CTR'] = Math.round((totalClicks / totalImps) * 10000) / 100;
-  secondaryMetrics['Avg. Daily Spend'] = Math.round(dailyRunRate * 100) / 100;
 
   // Trend
   const half = Math.floor(dailyData.length / 2);
@@ -407,133 +392,116 @@ export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unkno
   if (avgSecond > avgFirst * 1.1) kpiTrend = 'Improving';
   else if (avgSecond < avgFirst * 0.9) kpiTrend = 'Declining';
 
-  // Risks
-  const risks: Risk[] = [];
-  if (hasBudget && pacingStatus.includes('Underpacing')) {
-    risks.push({ severity: pacingStatus === 'Critical Underpacing' ? 'high' : 'medium', title: 'Budget Underdelivery', description: `Campaign is pacing at ${Math.round(pacingRatio * 100)}% of expected spend. Projected underspend: ${ctx.currency}${projectedUnderspend.toLocaleString()}.` });
-  }
-  if (hasBudget && pacingStatus.includes('Overpacing')) {
-    risks.push({ severity: pacingStatus === 'Critical Overpacing' ? 'high' : 'medium', title: 'Budget Overdelivery', description: `Campaign is overspending at ${Math.round(pacingRatio * 100)}% of expected spend.` });
-  }
-  if (kpiTrend === 'Declining') {
-    risks.push({ severity: 'medium', title: 'KPI Declining', description: `${ctx.kpi} performance is trending downward in the second half of the flight.` });
-  }
-  if (totalImps > 0 && totalClicks / totalImps < 0.001) {
-    risks.push({ severity: 'low', title: 'Low CTR', description: 'Click-through rate is below 0.1%, indicating weak creative engagement.' });
-  }
-  if (hasDates && remainingDays <= 3 && remainingDays > 0) {
-    risks.push({ severity: 'high', title: 'Flight Ending Soon', description: `Only ${remainingDays} day(s) remaining in this campaign flight.` });
-  }
-  if (!hasBudget) {
-    risks.push({ severity: 'low', title: 'No Budget Defined', description: 'Total budget not set. Pacing analysis is limited. Add a budget for full optimization insights.' });
-  }
-  if (risks.length === 0) {
-    risks.push({ severity: 'low', title: 'No Major Risks Detected', description: 'Campaign appears to be performing within acceptable parameters.' });
-  }
-
-  // General Recommendations
-  const recommendations: Recommendation[] = [];
-  if (hasBudget && pacingRatio < 0.9) {
-    recommendations.push({ priority: 1, action: 'Increase daily spend caps or broaden audience targeting', reason: `Current pacing at ${Math.round(pacingRatio * 100)}% risks significant underspend by flight end.`, impact: 'High' });
-  }
-  if (hasBudget && pacingRatio > 1.1) {
-    recommendations.push({ priority: 1, action: 'Reduce daily budgets or tighten targeting to control overspend', reason: `Spend is exceeding plan by ${Math.round((pacingRatio - 1) * 100)}%.`, impact: 'High' });
-  }
-  if (kpiTrend === 'Declining') {
-    recommendations.push({ priority: 2, action: `Review ${ctx.kpi} optimization strategy and creative rotation`, reason: 'Second-half performance is weaker than first half.', impact: 'Medium' });
-  }
-  if (totalImps > 0 && totalClicks / totalImps < 0.002) {
-    recommendations.push({ priority: 3, action: 'Refresh ad creatives or test new formats', reason: 'Low CTR suggests creative fatigue or poor audience-ad match.', impact: 'Medium' });
-  }
-  recommendations.push({ priority: recommendations.length + 1, action: 'Monitor daily pacing and KPI delivery for next 48 hours', reason: 'Ensure any adjustments are producing intended effects before scaling.', impact: 'Low' });
-
-  // Pacing-specific recommendations
+  // Recommendations
   const pacingRecs = generatePacingRecommendations(
-    pacingRatio, hasBudget, totalSpend, totalClicks, totalImps, totalConv, totalRevenue, kpiTrend, dailyRunRate, ctx
+    pacingRatio, hasBudget, totalSpend, totalClicks, totalImps, totalConv, totalRevenue, kpiTrend, dailyRunRate, ctx, level
   );
 
-  // Health summary
-  const healthParts: string[] = [];
-  if (hasBudget) {
-    healthParts.push(`Campaign "${ctx.account_name}" is ${pacingStatus.toLowerCase()} with ${elapsedDays} of ${totalDays} days elapsed.`);
-    healthParts.push(`Total spend: ${ctx.currency}${totalSpend.toLocaleString()} of ${ctx.currency}${ctx.total_budget.toLocaleString()} budget (${Math.round(pacingRatio * 100)}% pacing).`);
-  } else {
-    healthParts.push(`Campaign "${ctx.account_name}" has ${rows.length} rows of data across ${totalDays} days.`);
-    healthParts.push(`Total spend: ${ctx.currency}${totalSpend.toLocaleString()} (avg ${ctx.currency}${dailyRunRate.toFixed(2)}/day).`);
-  }
-  healthParts.push(`${ctx.kpi} performance is ${kpiTrend.toLowerCase()} with a current value of ${kpiValue.toLocaleString()}.`);
-  healthParts.push(`Optimizer: ${optimizer}.`);
+  const risks: Risk[] = [];
+  if (hasBudget && pacingStatus.includes('Underpacing')) risks.push({ severity: pacingStatus === 'Critical Underpacing' ? 'high' : 'medium', title: 'Underdelivery', description: `Pacing at ${Math.round(pacingRatio * 100)}%.` });
+  if (hasBudget && pacingStatus.includes('Overpacing')) risks.push({ severity: pacingStatus === 'Critical Overpacing' ? 'high' : 'medium', title: 'Overdelivery', description: `Pacing at ${Math.round(pacingRatio * 100)}%.` });
+  if (kpiTrend === 'Declining') risks.push({ severity: 'medium', title: 'KPI Declining', description: 'Performance trending down recently.' });
 
   return {
-    account_name: ctx.account_name,
-    health_summary: healthParts.join(' '),
+    id,
+    level,
+    name,
+    advertiser_name,
+    campaign_name,
+    parent_name,
+    health_summary: `${name} (${level}) has spent ${ctx.currency}${totalSpend.toLocaleString()} ${hasBudget ? `of ${ctx.currency}${budget.toLocaleString()}` : ''}.`,
     pacing,
     kpi_performance: { kpi_name: ctx.kpi, kpi_value: kpiValue, kpi_trend: kpiTrend, secondary_metrics: secondaryMetrics },
     risks,
-    recommendations,
+    recommendations: [], // Can populate general ones here
     pacing_recommendations: pacingRecs,
     daily_data: dailyData,
     optimizer_type: optimizer,
     row_count: rows.length,
-    campaign_names: campaignNames,
   };
-}
-
-export function detectAdvertisers(rows: Record<string, unknown>[]): string[] {
-  const cols = Object.keys(rows[0] || {});
-  const advertiserCol = findColumn(cols, ['advertiser', 'account', 'client', 'customer']);
-  if (!advertiserCol) return [];
-  
-  const unique = new Set<string>();
-  for (const row of rows) {
-    const name = String(row[advertiserCol] || '').trim();
-    if (name && name !== 'undefined' && name !== 'null') unique.add(name);
-  }
-  return Array.from(unique).sort();
 }
 
 export function bulkAnalyzeCampaigns(ctx: CampaignContext, rows: Record<string, unknown>[]): BulkAnalysisResult {
   const cols = Object.keys(rows[0] || {});
   const advertiserCol = findColumn(cols, ['advertiser', 'account', 'client', 'customer']);
+  const campaignCol = findColumn(cols, ['campaign', 'campaign_name', 'campaign name']);
+  const adSetCol = findColumn(cols, ['ad set', 'adset', 'ad_set', 'adgroup', 'ad group']);
 
-  if (!advertiserCol) {
-    // Fallback to single account analysis
-    const name = ctx.account_name || 'All Data';
-    const result = analyzeCampaign({ ...ctx, account_name: name }, rows);
-    return {
-      results: [result],
-      summary: {
-        total_accounts: 1,
-        total_spend: result.pacing.actual_spend,
-        total_budget: ctx.total_budget,
-        overall_pacing: result.pacing.pacing_ratio,
-        total_rows: rows.length,
+  const nodes: AnalysisNode[] = [];
+  let totalSpend = 0;
+
+  // If no hierarchy columns, just do a single root node
+  if (!advertiserCol && !campaignCol && !adSetCol) {
+    const root = processNodeAnalysis(ctx, rows, 'advertiser', ctx.account_name || 'All Data', 'root', ctx.account_name || 'All Data');
+    totalSpend = root.pacing.actual_spend;
+    nodes.push({ ...root, children: [] });
+  } else {
+    // Group by Advertiser -> Campaign -> Ad Set
+    const advMap = new Map<string, Record<string, unknown>[]>();
+    for (const row of rows) {
+      const adv = advertiserCol ? String(row[advertiserCol]).trim() : 'Default Advertiser';
+      if (!advMap.has(adv)) advMap.set(adv, []);
+      advMap.get(adv)!.push(row);
+    }
+
+    for (const [advName, advRows] of advMap.entries()) {
+      const advNodeData = processNodeAnalysis(ctx, advRows, 'advertiser', advName, advName, advName, undefined, undefined);
+      const advNode: AnalysisNode = { ...advNodeData, children: [] };
+      totalSpend += advNode.pacing.actual_spend;
+
+      const campMap = new Map<string, Record<string, unknown>[]>();
+      for (const row of advRows) {
+        const camp = campaignCol ? String(row[campaignCol]).trim() : 'Default Campaign';
+        if (!campMap.has(camp)) campMap.set(camp, []);
+        campMap.get(camp)!.push(row);
       }
-    };
+
+      for (const [campName, campRows] of campMap.entries()) {
+        const campId = `${advName}|${campName}`;
+        const campNodeData = processNodeAnalysis(ctx, campRows, 'campaign', campName, campId, advName, campName, advName);
+        const campNode: AnalysisNode = { ...campNodeData, children: [] };
+
+        const adSetMap = new Map<string, Record<string, unknown>[]>();
+        for (const row of campRows) {
+          const adSet = adSetCol ? String(row[adSetCol]).trim() : 'Default Ad Set';
+          if (!adSetMap.has(adSet)) adSetMap.set(adSet, []);
+          adSetMap.get(adSet)!.push(row);
+        }
+
+        // Only add ad sets if the column exists
+        if (adSetCol) {
+          for (const [adSetName, adSetRows] of adSetMap.entries()) {
+            const adSetId = `${advName}|${campName}|${adSetName}`;
+            const adSetNodeData = processNodeAnalysis(ctx, adSetRows, 'ad_set', adSetName, adSetId, advName, campName, campName);
+            campNode.children.push({ ...adSetNodeData, children: [] });
+          }
+        }
+
+        // Only add campaigns if column exists or we have ad sets
+        if (campaignCol || adSetCol) {
+          advNode.children.push(campNode);
+        }
+      }
+      
+      nodes.push(advNode);
+    }
   }
 
-  // Group by advertiser
-  const groups: Record<string, Record<string, unknown>[]> = {};
-  for (const row of rows) {
-    const name = String(row[advertiserCol] || 'Unknown Account').trim();
-    if (!groups[name]) groups[name] = [];
-    groups[name].push(row);
+  // Calculate total budget (sum of all ad set budgets if provided, otherwise ctx.total_budget)
+  let totalBudget = 0;
+  if (Object.keys(ctx.ad_set_budgets).length > 0) {
+    totalBudget = Object.values(ctx.ad_set_budgets).reduce((a, b) => a + b, 0);
+  } else {
+    totalBudget = ctx.total_budget;
   }
 
-  const results = Object.entries(groups).map(([name, groupRows]) => {
-    return analyzeCampaign({ ...ctx, account_name: name }, groupRows);
-  });
-
-  const totalSpend = results.reduce((s, r) => s + r.pacing.actual_spend, 0);
-  const totalBudget = ctx.total_budget > 0 ? results.length * ctx.total_budget : 0;
-  
   return {
-    results,
+    nodes,
     summary: {
-      total_accounts: results.length,
-      total_spend: Math.round(totalSpend * 100) / 100,
+      total_accounts: nodes.length,
+      total_spend: totalSpend,
       total_budget: totalBudget,
-      overall_pacing: totalBudget > 0 ? Math.round((totalSpend / totalBudget) * 100) / 100 : 0,
+      overall_pacing: totalBudget > 0 ? totalSpend / totalBudget : 0,
       total_rows: rows.length,
     }
   };
