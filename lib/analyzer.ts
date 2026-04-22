@@ -91,6 +91,7 @@ function num(val: unknown): number {
 export function analyzeCampaign(ctx: CampaignContext, rows: Record<string, unknown>[]): AnalysisResult {
   if (!rows.length) {
     return {
+      account_name: ctx.account_name,
       health_summary: 'No data available for analysis.',
       pacing: { elapsed_days: 0, remaining_days: 0, total_days: 0, expected_spend: 0, actual_spend: 0, pacing_ratio: 0, pacing_status: 'Critical Underpacing', projected_total_spend: 0, projected_underspend: ctx.total_budget },
       kpi_performance: { kpi_name: ctx.kpi, kpi_value: 0, kpi_trend: 'Stable', secondary_metrics: {} },
