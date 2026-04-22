@@ -4,10 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
 import { analyzeCampaign, AnalysisResult, CampaignContext } from '../lib/analyzer';
 import Dashboard from './components/Dashboard';
-import Auth from './components/Auth';
-import { supabase } from '../lib/supabase';
 import { processUpload } from '../lib/db';
-import { User } from '@supabase/supabase-js';
 
 const KPI_OPTIONS = [
   'ROAS / Revenue',
@@ -18,8 +15,6 @@ const KPI_OPTIONS = [
 ];
 
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
 
   const [step, setStep] = useState<'upload' | 'config' | 'analysis'>('upload');
   const [csvData, setCsvData] = useState<Record<string, unknown>[]>([]);
@@ -39,18 +34,7 @@ export default function Home() {
     end_date: '',
   });
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setAuthLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const DUMMY_USER_ID = '00000000-0000-0000-0000-000000000000';
 
   const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) return;
@@ -74,13 +58,12 @@ export default function Home() {
   }, [handleFile]);
 
   const runAnalysis = async () => {
-    if (!user) return;
     setAnalyzing(true);
     try {
       const result = analyzeCampaign(config, csvData);
       
       // Save hierarchically to Supabase (User > Advertiser > Campaign > AdSets > Metrics)
-      await processUpload(user.id, config, result, csvData);
+      await processUpload(DUMMY_USER_ID, config, result, csvData);
       
       setAnalysis(result);
       setStep('analysis');
@@ -92,17 +75,7 @@ export default function Home() {
     }
   };
 
-  if (authLoading) {
-    return (
-      <main className="main-content fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="loading-spinner" />
-      </main>
-    );
-  }
 
-  if (!user) {
-    return <Auth />;
-  }
 
   if (step === 'analysis' && analysis) {
     return (
