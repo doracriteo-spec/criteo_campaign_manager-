@@ -15,6 +15,8 @@ const KPI_OPTIONS = [
   'Visits',
   'Clicks',
   'App Installs',
+  'CPC (Cost Per Click)',
+  'CPV (Cost Per View)',
 ];
 
 export default function Home() {

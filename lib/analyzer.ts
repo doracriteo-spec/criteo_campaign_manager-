@@ -74,6 +74,8 @@ export interface BulkAnalysisResult {
     total_budget: number;
     overall_pacing: number;
     total_rows: number;
+    total_impressions: number;
+    total_conversions: number;
   };
 }
 
@@ -272,6 +274,8 @@ function processNodeAnalysis(
     else if (kpiLower.includes('sale') || kpiLower.includes('conversion')) kpiVal = convCol ? num(row[convCol]) : 0;
     else if (kpiLower.includes('visit')) kpiVal = visitCol ? num(row[visitCol]) : 0;
     else if (kpiLower.includes('click')) kpiVal = clickCol ? num(row[clickCol]) : 0;
+    else if (kpiLower.includes('cpc')) kpiVal = clickCol ? num(row[clickCol]) : 0;
+    else if (kpiLower.includes('cpv')) kpiVal = impCol ? num(row[impCol]) : 0; // Cost per View usually tracks views/imps
     else kpiVal = spend;
 
     const date = dateCol ? String(row[dateCol]) : 'Unknown';
@@ -373,6 +377,10 @@ function processNodeAnalysis(
   } else if (kpiLower.includes('click')) {
     kpiValue = totalClicks;
     secondaryMetrics['CPC'] = totalClicks > 0 ? Math.round((totalSpend / totalClicks) * 100) / 100 : 0;
+  } else if (kpiLower.includes('cpc')) {
+    kpiValue = totalClicks > 0 ? Math.round((totalSpend / totalClicks) * 100) / 100 : 0;
+  } else if (kpiLower.includes('cpv')) {
+    kpiValue = totalImps > 0 ? Math.round((totalSpend / totalImps) * 100) / 100 : 0;
   } else {
     kpiValue = totalSpend;
   }
@@ -429,6 +437,8 @@ export function bulkAnalyzeCampaigns(ctx: CampaignContext, rows: Record<string, 
 
   const nodes: AnalysisNode[] = [];
   let totalSpend = 0;
+  let totalImpressions = 0;
+  let totalConversions = 0;
 
   // If no hierarchy columns, just do a single root node
   if (!advertiserCol && !campaignCol && !adSetCol) {
@@ -484,6 +494,8 @@ export function bulkAnalyzeCampaigns(ctx: CampaignContext, rows: Record<string, 
       }
       
       nodes.push(advNode);
+      totalImpressions += advNode.kpi_performance.secondary_metrics['Impressions'] || 0;
+      totalConversions += advNode.kpi_performance.secondary_metrics['Conversions'] || 0;
     }
   }
 
@@ -503,6 +515,8 @@ export function bulkAnalyzeCampaigns(ctx: CampaignContext, rows: Record<string, 
       total_budget: totalBudget,
       overall_pacing: totalBudget > 0 ? totalSpend / totalBudget : 0,
       total_rows: rows.length,
+      total_impressions: totalImpressions,
+      total_conversions: totalConversions,
     }
   };
 }
