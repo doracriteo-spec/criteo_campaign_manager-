@@ -13,22 +13,34 @@ export async function POST(req: Request) {
     }
 
     // 1. Get Direct Line Token from Copilot Studio
-    // Using the Power Virtual Agents (Copilot Studio) specific token endpoint
-    // Note: Some bots use regional endpoints, but powerva.microsoft.com is the global proxy
-    const tokenResponse = await fetch(`https://powerva.microsoft.com/api/botmanagement/v1/directline/directlinetoken?botId=${process.env.AZURE_BOT_ID}`, {
+    let dlToken = "";
+    
+    // First try the environment-specific endpoint (most reliable for regional bots)
+    const envId = process.env.AZURE_ENVIRONMENT_ID?.replace('Default-', '');
+    const regionalUrl = `https://${envId}.environment.api.powerplatform.com/powervirtualagents/bots/${process.env.AZURE_BOT_ID}/directline/token?api-version=2022-03-01-preview`;
+    const globalUrl = `https://powerva.microsoft.com/api/botmanagement/v1/directline/directlinetoken?botId=${process.env.AZURE_BOT_ID}`;
+
+    let tokenResponse = await fetch(regionalUrl, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${process.env.AZURE_CLIENT_SECRET}`
-      }
+      headers: { 'Authorization': `Bearer ${process.env.AZURE_CLIENT_SECRET}` }
     });
+
+    if (!tokenResponse.ok) {
+      console.log('Regional endpoint failed, trying global proxy...');
+      tokenResponse = await fetch(globalUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${process.env.AZURE_CLIENT_SECRET}` }
+      });
+    }
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error('Copilot Token Error:', errorText);
-      throw new Error(`Failed to get Direct Line token from Copilot Studio. Ensure your Client Secret is correct and the bot is published.`);
+      throw new Error(`Failed to get Direct Line token. Error: ${errorText}. Please verify that the bot is published and the Client Secret is correct.`);
     }
 
-    const { token: dlToken } = await tokenResponse.json();
+    const tokenData = await tokenResponse.json();
+    dlToken = tokenData.token;
 
     // 2. Start Conversation with Direct Line
     const convResponse = await fetch('https://directline.botframework.com/v3/directline/conversations', {
