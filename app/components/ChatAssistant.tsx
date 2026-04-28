@@ -15,7 +15,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
   const [isOpen, setIsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = (useChat as any)({
     api: '/api/chat',
     body: {
       context: {
