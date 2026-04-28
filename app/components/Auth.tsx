@@ -21,12 +21,18 @@ export default function Auth({ onGuestAccess }: AuthProps) {
     
     // If invalid credentials, they might not exist yet. Let's auto-signup to make it easy.
     if (error && error.message.includes('Invalid login')) {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
       if (signUpError) {
         alert(signUpError.message);
+      } else if (signUpData.user && !signUpData.session) {
+        alert('Account created! Please check your email to confirm your account before signing in.');
       }
     } else if (error) {
-      alert(error.message);
+      if (error.message.includes('Email not confirmed')) {
+        alert('Please check your email to confirm your account before signing in.');
+      } else {
+        alert(error.message);
+      }
     }
     
     setLoading(false);
