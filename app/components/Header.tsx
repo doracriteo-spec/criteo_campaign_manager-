@@ -26,7 +26,7 @@ export default function Header() {
   return (
     <header className="header">
       <div className="header-logo">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--criteo-orange)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--brand-orange)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <line x1="18" y1="20" x2="18" y2="10"></line>
           <line x1="12" y1="20" x2="12" y2="4"></line>
           <line x1="6" y1="20" x2="6" y2="14"></line>

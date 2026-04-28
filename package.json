@@ -1,5 +1,5 @@
 {
-  "name": "criteo-campaign-manager",
+  "name": "campaign-performance-analyzer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.71",
+    "@ai-sdk/google": "^3.0.64",
+    "@ai-sdk/react": "^3.0.170",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.104.0",
+    "ai": "^6.0.168",
     "chart.js": "^4.5.1",
     "lucide-react": "^1.8.0",
     "next": "16.2.4",

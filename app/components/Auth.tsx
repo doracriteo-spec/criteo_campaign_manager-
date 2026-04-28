@@ -37,11 +37,11 @@ export default function Auth() {
               fontWeight: 900,
               fontSize: '32px',
               letterSpacing: '-1.5px',
-              color: 'var(--criteo-orange)',
+              color: 'var(--brand-orange)',
               fontFamily: 'Inter, sans-serif',
               lineHeight: 1
             }}>
-              CRITEO
+              ANALYTICS
             </div>
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>Welcome Back</h2>

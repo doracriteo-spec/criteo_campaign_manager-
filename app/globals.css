@@ -1,11 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  --criteo-orange: #F48120;
-  --criteo-orange-light: #FF9B45;
-  --criteo-orange-dark: #D66A10;
-  --criteo-dark: #1A1A2E;
-  --criteo-navy: #16213E;
+  --brand-orange: #F48120;
+  --brand-orange-light: #FF9B45;
+  --brand-orange-dark: #D66A10;
+  --brand-dark: #1A1A2E;
+  --brand-navy: #16213E;
   --bg-primary: #FAFBFC;
   --bg-card: #FFFFFF;
   --bg-card-hover: #FFF8F2;
@@ -45,7 +45,7 @@ body {
 .app-container { min-height: 100vh; display: flex; flex-direction: column; }
 
 .header {
-  background: linear-gradient(135deg, var(--criteo-dark) 0%, var(--criteo-navy) 100%);
+  background: linear-gradient(135deg, var(--brand-dark) 0%, var(--brand-navy) 100%);
   padding: 0 32px;
   height: 64px;
   display: flex;
@@ -86,7 +86,7 @@ body {
 
 .header-badge {
   background: rgba(244,129,32,0.15);
-  color: var(--criteo-orange-light);
+  color: var(--brand-orange-light);
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
@@ -144,7 +144,7 @@ body {
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--criteo-orange);
+  background: var(--brand-orange);
   opacity: 0;
   transition: opacity 0.25s ease;
 }
@@ -176,7 +176,7 @@ body {
   height: 100%;
   border-radius: 4px;
   transition: width 1s ease;
-  background: linear-gradient(90deg, var(--criteo-orange), var(--criteo-orange-light));
+  background: linear-gradient(90deg, var(--brand-orange), var(--brand-orange-light));
 }
 
 .pacing-bar-fill.overpacing { background: linear-gradient(90deg, var(--danger), #F87171); }
@@ -223,7 +223,7 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--criteo-orange), var(--criteo-orange-light));
+  background: linear-gradient(135deg, var(--brand-orange), var(--brand-orange-light));
   color: #fff;
   font-size: 13px;
   font-weight: 700;
@@ -249,7 +249,7 @@ body {
 }
 
 .upload-zone:hover, .upload-zone.drag-over {
-  border-color: var(--criteo-orange);
+  border-color: var(--brand-orange);
   background: rgba(244,129,32,0.02);
   transform: scale(1.005);
 }
@@ -266,7 +266,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--criteo-orange);
+  color: var(--brand-orange);
 }
 
 /* Form */
@@ -289,7 +289,7 @@ body {
 }
 
 .form-input:focus, .form-select:focus {
-  border-color: var(--criteo-orange);
+  border-color: var(--brand-orange);
   box-shadow: 0 0 0 3px rgba(244,129,32,0.1);
 }
 
@@ -309,7 +309,7 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--criteo-orange), var(--criteo-orange-dark));
+  background: linear-gradient(135deg, var(--brand-orange), var(--brand-orange-dark));
   color: #fff;
   box-shadow: 0 2px 8px rgba(244,129,32,0.3);
 }
@@ -340,7 +340,7 @@ body {
 
 /* Health Summary */
 .health-summary {
-  background: linear-gradient(135deg, var(--criteo-dark) 0%, var(--criteo-navy) 100%);
+  background: linear-gradient(135deg, var(--brand-dark) 0%, var(--brand-navy) 100%);
   border-radius: var(--radius-lg);
   padding: 28px 32px;
   color: #fff;
@@ -380,7 +380,7 @@ body {
   width: 40px;
   height: 40px;
   border: 3px solid var(--border);
-  border-top-color: var(--criteo-orange);
+  border-top-color: var(--brand-orange);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 40px auto;

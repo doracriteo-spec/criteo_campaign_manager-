@@ -1,6 +1,6 @@
 const { Client } = require('pg');
 
-const uri = 'postgresql://postgres:KBK517CACRITEO@db.gjbnxjvumokctckkxuvh.supabase.co:5432/postgres';
+const uri = 'postgresql://postgres.gjbnxjvumokctckkxuvh:KBK517CACRITEO@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
 
 const client = new Client({ connectionString: uri });
 

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { AnalysisNode, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
 import SpendChart from './SpendChart';
+import ChatAssistant from './ChatAssistant';
 
 interface DashboardProps {
   analysis: BulkAnalysisResult;
@@ -68,7 +69,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
             gap: 10,
             borderBottom: '1px solid var(--border-light)',
             background: isSelected ? 'var(--bg-card-hover)' : 'transparent',
-            borderLeft: isSelected ? '3px solid var(--criteo-orange)' : '3px solid transparent',
+            borderLeft: isSelected ? '3px solid var(--brand-orange)' : '3px solid transparent',
             transition: 'all 0.15s ease',
           }}
         >
@@ -270,6 +271,8 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
           </div>
         )}
       </div>
+
+      <ChatAssistant analysis={analysis} config={config} currentNode={currentNode} />
     </div>
   );
 }

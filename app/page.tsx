@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import Papa from 'papaparse';
 import { bulkAnalyzeCampaigns, detectHierarchy, BulkAnalysisResult, CampaignContext, DetectedHierarchy } from '../lib/analyzer';
+import { processUpload } from '../lib/db';
+import { supabase } from '../lib/supabase';
+import { User } from '@supabase/supabase-js';
 import Dashboard from './components/Dashboard';
+import Auth from './components/Auth';
 
 const KPI_OPTIONS = [
   'ROAS / Revenue',
@@ -14,6 +18,8 @@ const KPI_OPTIONS = [
 ];
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [step, setStep] = useState<'upload' | 'preview' | 'analysis'>('upload');
   const [csvData, setCsvData] = useState<Record<string, unknown>[]>([]);
   const [csvFileName, setCsvFileName] = useState('');
@@ -22,6 +28,19 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<BulkAnalysisResult | null>(null);
   const [detectedHierarchy, setDetectedHierarchy] = useState<DetectedHierarchy[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const [config, setConfig] = useState<CampaignContext>({
     account_name: '',
@@ -64,6 +83,22 @@ export default function Home() {
     setAnalyzing(true);
     try {
       const result = bulkAnalyzeCampaigns(config, csvData);
+      
+      // Save to database if user is logged in
+      if (user) {
+        try {
+          // We iterate over top level nodes (advertisers) and save them
+          // In a real app, we might save the whole bulk result or specific campaign nodes
+          for (const node of result.nodes) {
+             await processUpload(user.id, config, node, csvData);
+          }
+          console.log('Analysis saved to database successfully');
+        } catch (dbError) {
+          console.error('Failed to save to database:', dbError);
+          // Don't block the user if DB save fails, just log it
+        }
+      }
+
       setAnalysis(result);
       setStep('analysis');
     } catch (error) {
@@ -114,6 +149,18 @@ export default function Home() {
     });
     return advertisers;
   }, [detectedHierarchy]);
+
+  if (authLoading) {
+    return (
+      <div className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+        <div className="loading-spinner" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   if (step === 'analysis' && analysis) {
     return (
