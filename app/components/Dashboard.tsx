@@ -271,7 +271,6 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
           </div>
         )}
       </div>
-
       <ChatAssistant analysis={analysis} config={config} currentNode={currentNode} />
     </div>
   );

@@ -20,6 +20,7 @@ const KPI_OPTIONS = [
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
   const [step, setStep] = useState<'upload' | 'preview' | 'analysis'>('upload');
   const [csvData, setCsvData] = useState<Record<string, unknown>[]>([]);
   const [csvFileName, setCsvFileName] = useState('');
@@ -158,8 +159,8 @@ export default function Home() {
     );
   }
 
-  if (!user) {
-    return <Auth />;
+  if (!user && !isGuest) {
+    return <Auth onGuestAccess={() => setIsGuest(true)} />;
   }
 
   if (step === 'analysis' && analysis) {

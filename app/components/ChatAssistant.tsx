@@ -15,7 +15,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
   const [isOpen, setIsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = (useChat as any)({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = (useChat as any)({
     api: '/api/chat',
     body: {
       context: {
@@ -83,7 +83,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
               <div className="suggestion-grid">
                 {suggestions.map((s, i) => (
                   <button key={i} className="suggestion-chip" onClick={() => {
-                    handleInputChange({ target: { value: s } } as any);
+                    append({ role: 'user', content: s });
                   }}>
                     {s.includes('email') ? <Mail size={12} /> : <MessageSquare size={12} />}
                     {s}
@@ -149,7 +149,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           gap: 10px;
           cursor: pointer;
           box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-          z-index: 1000;
+          z-index: 2000;
           transition: transform 0.2s ease, background 0.2s ease;
         }
         .chat-trigger:hover {
@@ -168,7 +168,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           box-shadow: 0 20px 50px rgba(0,0,0,0.15);
           display: flex;
           flex-direction: column;
-          z-index: 1000;
+          z-index: 2000;
           transform: translateY(20px);
           opacity: 0;
           pointer-events: none;
@@ -178,7 +178,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
         .chat-panel.open {
           transform: translateY(0);
           opacity: 1;
-          pointer-events: all;
+          pointer-events: auto;
         }
 
         .chat-header {

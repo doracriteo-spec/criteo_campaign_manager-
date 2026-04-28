@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
-export default function Auth() {
+interface AuthProps {
+  onGuestAccess: () => void;
+}
+
+export default function Auth({ onGuestAccess }: AuthProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,6 +77,20 @@ export default function Auth() {
             style={{ width: '100%', justifyContent: 'center', padding: '12px 16px', fontSize: 15 }}
           >
             {loading ? 'Authenticating...' : 'Sign In / Sign Up'}
+          </button>
+          
+          <div style={{ position: 'relative', margin: '24px 0', textAlign: 'center' }}>
+            <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: 'var(--border)', zIndex: 1 }}></div>
+            <span style={{ position: 'relative', background: 'var(--bg-card)', padding: '0 12px', fontSize: 12, color: 'var(--text-muted)', zIndex: 2 }}>OR</span>
+          </div>
+
+          <button 
+            type="button"
+            onClick={onGuestAccess}
+            className="btn btn-secondary" 
+            style={{ width: '100%', justifyContent: 'center', padding: '12px 16px', fontSize: 15 }}
+          >
+            Continue as Guest
           </button>
         </form>
       </div>
