@@ -1,6 +1,5 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
 import { useState, useEffect, useRef } from 'react';
 import { AnalysisNode, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
 import { Send, X, MessageSquare, Bot, Mail, Sparkles } from 'lucide-react';
@@ -11,32 +10,32 @@ interface ChatAssistantProps {
   currentNode: AnalysisNode;
 }
 
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export default function ChatAssistant({ analysis, config, currentNode }: ChatAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = (useChat as any)({
-    api: '/api/chat',
-    body: {
-      context: {
-        summary: analysis.summary,
-        config: config,
-        currentNode: {
-          name: currentNode.name,
-          level: currentNode.level,
-          pacing: currentNode.pacing,
-          kpi_performance: currentNode.kpi_performance,
-          risks: currentNode.risks,
-        }
-      }
-    }
-  });
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 300);
+    }
+  }, [isOpen]);
 
   const suggestions = [
     "How is this campaign pacing?",
@@ -45,10 +44,83 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
     "Draft a quick email update to the client"
   ];
 
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: text };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
+          context: {
+            summary: analysis.summary,
+            config: config,
+            currentNode: {
+              name: currentNode.name,
+              level: currentNode.level,
+              pacing: currentNode.pacing,
+              kpi_performance: currentNode.kpi_performance,
+              risks: currentNode.risks,
+            }
+          }
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+
+      // Read the response — handles both plain text and 0: prefixed AI SDK format
+      const rawText = await res.text();
+      let botReply = rawText;
+
+      // Parse AI SDK protocol lines (e.g. 0:"hello"\n)
+      const lines = rawText.split('\n').filter(l => l.trim());
+      const parsed = lines
+        .filter(l => l.startsWith('0:'))
+        .map(l => {
+          try { return JSON.parse(l.slice(2)); } catch { return l.slice(2); }
+        })
+        .join('');
+
+      if (parsed) botReply = parsed;
+
+      setMessages(prev => [...prev, {
+        id: Date.now().toString() + '-bot',
+        role: 'assistant',
+        content: botReply || "I received your message but didn't get a response from the bot."
+      }]);
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    sendMessage(input);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(input);
+    }
+  };
+
   return (
     <>
       {/* Trigger Button */}
-      <button 
+      <button
         className="chat-trigger"
         onClick={() => setIsOpen(true)}
       >
@@ -79,12 +151,10 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
               <div className="welcome-icon">⚡</div>
               <h3>Hello! I'm your campaign analyst.</h3>
               <p>I can help you analyze performance, identify risks, and draft client communications based on your current data.</p>
-              
+
               <div className="suggestion-grid">
                 {suggestions.map((s, i) => (
-                  <button key={i} className="suggestion-chip" onClick={() => {
-                    append({ role: 'user', content: s });
-                  }}>
+                  <button key={i} className="suggestion-chip" onClick={() => sendMessage(s)}>
                     {s.includes('email') ? <Mail size={12} /> : <MessageSquare size={12} />}
                     {s}
                   </button>
@@ -93,7 +163,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
             </div>
           )}
 
-          {messages.map((m: any) => (
+          {messages.map((m) => (
             <div key={m.id} className={`message-wrapper ${m.role}`}>
               <div className="message-bubble">
                 {m.content}
@@ -114,32 +184,26 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           {error && (
             <div className="message-wrapper assistant">
               <div className="message-bubble" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                <strong>Assistant Error:</strong> {(error as any).message || "An unexpected error occurred. Please check your connection or API configuration."}
+                <strong>Error:</strong> {error}
               </div>
             </div>
           )}
         </div>
 
-        <form className="chat-input-area" onSubmit={(e) => {
-          e.preventDefault();
-          if (input && !isLoading) handleSubmit(e);
-        }}>
+        <form className="chat-input-area" onSubmit={handleSubmit}>
           <input
+            ref={inputRef}
             className="chat-input"
             value={input}
             placeholder="Ask a question about your campaigns..."
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && input && !isLoading) {
-                e.preventDefault();
-                handleSubmit(e as any);
-              }
-            }}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
           />
-          <button 
-            className="chat-send" 
-            type="submit" 
-            disabled={!input || isLoading}
+          <button
+            className="chat-send"
+            type="submit"
+            disabled={!input.trim() || isLoading}
           >
             <Send size={18} />
           </button>
@@ -174,8 +238,8 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           position: fixed;
           bottom: 100px;
           right: 30px;
-          width: 400px;
-          height: 600px;
+          width: 420px;
+          height: 620px;
           background: #fff;
           border-radius: 20px;
           box-shadow: 0 20px 50px rgba(0,0,0,0.15);
@@ -200,6 +264,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           display: flex;
           justify-content: space-between;
           align-items: center;
+          flex-shrink: 0;
         }
         .chat-avatar {
           width: 36px;
@@ -264,6 +329,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           align-items: center;
           gap: 8px;
           transition: all 0.2s ease;
+          font-family: inherit;
         }
         .suggestion-chip:hover {
           border-color: var(--brand-orange);
@@ -302,21 +368,30 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
         }
 
         .chat-input-area {
-          padding: 20px;
+          padding: 16px 20px;
           border-top: 1px solid var(--border);
           display: flex;
           gap: 12px;
+          align-items: center;
+          flex-shrink: 0;
         }
         .chat-input {
           flex: 1;
-          border: 1px solid var(--border);
+          border: 1.5px solid var(--border);
           border-radius: 12px;
           padding: 10px 16px;
           font-size: 14px;
+          font-family: inherit;
           outline: none;
+          background: #fff;
+          color: var(--text-primary);
+          transition: border-color 0.2s;
         }
         .chat-input:focus {
           border-color: var(--brand-orange);
+        }
+        .chat-input:disabled {
+          opacity: 0.6;
         }
         .chat-send {
           width: 42px;
@@ -329,6 +404,11 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           align-items: center;
           justify-content: center;
           cursor: pointer;
+          flex-shrink: 0;
+          transition: background 0.2s;
+        }
+        .chat-send:hover:not(:disabled) {
+          background: var(--brand-orange);
         }
         .chat-send:disabled {
           background: var(--border);
