@@ -3,127 +3,72 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   try {
     const { messages, context } = await req.json();
-    const lastMessage = messages[messages.length - 1];
 
-    if (!process.env.AZURE_CLIENT_ID || !process.env.AZURE_CLIENT_SECRET || !process.env.AZURE_TENANT_ID) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "Azure credentials missing. Please check your .env.local file." }),
+        JSON.stringify({ error: 'ANTHROPIC_API_KEY is not configured.' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // 1. Get OAuth Token from Microsoft
-    const tokenResponse = await fetch(process.env.AZURE_TOKEN_ENDPOINT!, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.AZURE_CLIENT_ID!,
-        client_secret: process.env.AZURE_CLIENT_SECRET!,
-        grant_type: 'client_credentials',
-        scope: 'https://api.botframework.com/.default',
-      }),
-    });
+    // Build a rich system prompt with full campaign context
+    const systemPrompt = `You are a Senior Campaign Strategy Analyst for a performance marketing agency. 
+You have deep expertise in Criteo campaign management, digital advertising, pacing analysis, and ROAS optimization.
 
-    if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json();
-      throw new Error(`Azure Auth Failed: ${JSON.stringify(errorData)}`);
-    }
+You are currently analyzing the following campaign data:
 
-    const { access_token } = await tokenResponse.json();
+ENTITY: ${context.currentNode.name} (${context.currentNode.level} level)
+PACING STATUS: ${context.currentNode.pacing.pacing_status} at ${Math.round(context.currentNode.pacing.pacing_ratio * 100)}%
+ACTUAL SPEND: ${context.config.currency}${context.currentNode.pacing.actual_spend.toLocaleString()}
+EXPECTED SPEND: ${context.config.currency}${context.currentNode.pacing.expected_spend.toLocaleString()}
+PROJECTED TOTAL: ${context.config.currency}${context.currentNode.pacing.projected_total_spend.toLocaleString()}
+DAYS ELAPSED: ${context.currentNode.pacing.elapsed_days} of ${context.currentNode.pacing.total_days} (${context.currentNode.pacing.remaining_days} remaining)
+KPI: ${context.currentNode.kpi_performance.kpi_name} = ${context.currentNode.kpi_performance.kpi_value.toLocaleString()} (Trend: ${context.currentNode.kpi_performance.kpi_trend})
+PRIMARY KPI TARGET: ${context.config.kpi}
+RISKS IDENTIFIED: ${context.currentNode.risks.length > 0 ? context.currentNode.risks.map((r: any) => `${r.severity.toUpperCase()} - ${r.title}: ${r.description}`).join(' | ') : 'None'}
+PORTFOLIO SUMMARY: Total Spend ${context.config.currency}${context.summary.total_spend?.toLocaleString()}, ${context.summary.total_rows} rows analysed
 
-    // 2. Start Conversation with Direct Line
-    const convResponse = await fetch('https://directline.botframework.com/v3/directline/conversations', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
+Be concise, actionable, and data-driven. When drafting client emails, be professional and use the specific numbers above. 
+Always refer to actual data from the context rather than making generic statements.`;
 
-    if (!convResponse.ok) {
-      throw new Error('Failed to start Direct Line conversation');
-    }
+    // Convert messages to Anthropic format
+    const anthropicMessages = messages.map((m: { role: string; content: string }) => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content,
+    }));
 
-    const { conversationId, token: dlToken } = await convResponse.json();
-
-    // 3. Send Message to Bot (including Campaign Context)
-    // We send the context as part of the message to ensure Copilot "reads" the data
-    const contextString = `
-[CONTEXT DATA]
-Entity: ${context.currentNode.name}
-Level: ${context.currentNode.level}
-Pacing: ${Math.round(context.currentNode.pacing.pacing_ratio * 100)}% (${context.currentNode.pacing.pacing_status})
-Spend: ${context.currentNode.pacing.actual_spend} / ${context.currentNode.pacing.expected_spend}
-KPI: ${context.currentNode.kpi_performance.kpi_name} = ${context.currentNode.kpi_performance.kpi_value}
-Risks: ${context.currentNode.risks.length > 0 ? context.currentNode.risks.map((r: any) => r.title).join(', ') : 'None'}
-[/CONTEXT DATA]
-
-User Message: ${lastMessage.content}
-    `;
-
-    const sendResponse = await fetch(`https://directline.botframework.com/v3/directline/conversations/${conversationId}/activities`, {
+    // Call Anthropic API directly
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${dlToken}`,
         'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        type: 'message',
-        from: { id: 'user1', name: 'Campaign Manager' },
-        text: contextString,
+        model: 'claude-3-5-haiku-20241022',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: anthropicMessages,
       }),
     });
 
-    if (!sendResponse.ok) {
-      throw new Error('Failed to send message to Copilot Studio');
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(`Anthropic API error: ${errData.error?.message || response.statusText}`);
     }
 
-    // 4. Poll for Response
-    // We return a stream so the UI feels responsive
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        let foundResponse = false;
-        let attempts = 0;
-        const maxAttempts = 15;
+    const data = await response.json();
+    const reply = data.content?.[0]?.text || 'No response from assistant.';
 
-        while (!foundResponse && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for bot processing
-          
-          const pollResponse = await fetch(`https://directline.botframework.com/v3/directline/conversations/${conversationId}/activities`, {
-            headers: { Authorization: `Bearer ${dlToken}` },
-          });
-
-          if (pollResponse.ok) {
-            const { activities } = await pollResponse.json();
-            // Find the first message from the bot that isn't our own message
-            const botActivity = activities.find((a: any) => 
-              a.from.id !== 'user1' && 
-              a.type === 'message' && 
-              a.text
-            );
-
-            if (botActivity) {
-              // Format for AI SDK useChat compatibility (0: is text chunk)
-              controller.enqueue(encoder.encode(`0:${JSON.stringify(botActivity.text)}\n`));
-              foundResponse = true;
-            }
-          }
-          attempts++;
-        }
-
-        if (!foundResponse) {
-          controller.enqueue(encoder.encode(`0:${JSON.stringify("Copilot Studio is taking a bit longer to respond. Please check your bot status in the portal.")}\n`));
-        }
-        controller.close();
-      }
-    });
-
-    return new Response(stream, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+    return new Response(JSON.stringify({ reply }), {
+      headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (error: any) {
-    console.error('Copilot Studio Error:', error);
+    console.error('Chat API Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message || "An error occurred connecting to Copilot Studio." }),
+      JSON.stringify({ error: error.message || 'An unexpected error occurred.' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

@@ -78,20 +78,8 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
         throw new Error(errData.error || `Server error ${res.status}`);
       }
 
-      // Read the response — handles both plain text and 0: prefixed AI SDK format
-      const rawText = await res.text();
-      let botReply = rawText;
-
-      // Parse AI SDK protocol lines (e.g. 0:"hello"\n)
-      const lines = rawText.split('\n').filter(l => l.trim());
-      const parsed = lines
-        .filter(l => l.startsWith('0:'))
-        .map(l => {
-          try { return JSON.parse(l.slice(2)); } catch { return l.slice(2); }
-        })
-        .join('');
-
-      if (parsed) botReply = parsed;
+      const data = await res.json();
+      const botReply = data.reply || "I received your message but couldn't generate a response.";
 
       setMessages(prev => [...prev, {
         id: Date.now().toString() + '-bot',
