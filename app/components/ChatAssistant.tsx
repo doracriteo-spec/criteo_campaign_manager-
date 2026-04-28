@@ -15,7 +15,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
   const [isOpen, setIsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = (useChat as any)({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = useChat({
     api: '/api/chat',
     body: {
       context: {
@@ -120,14 +120,27 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
           )}
         </div>
 
-        <form className="chat-input-area" onSubmit={handleSubmit}>
+        <form className="chat-input-area" onSubmit={(e) => {
+          e.preventDefault();
+          if (input && !isLoading) handleSubmit(e);
+        }}>
           <input
             className="chat-input"
             value={input}
             placeholder="Ask a question about your campaigns..."
             onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && input && !isLoading) {
+                e.preventDefault();
+                handleSubmit(e as any);
+              }
+            }}
           />
-          <button className="chat-send" type="submit" disabled={!input || isLoading}>
+          <button 
+            className="chat-send" 
+            type="submit" 
+            disabled={!input || isLoading}
+          >
             <Send size={18} />
           </button>
         </form>
