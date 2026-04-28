@@ -168,7 +168,13 @@ export default function Home() {
   if (step === 'analysis' && analysis) {
     return (
       <main className="main-content">
-        <Dashboard analysis={analysis} config={config} csvFileName={csvFileName} onReset={handleReset} />
+        <Dashboard 
+          analysis={analysis} 
+          config={config} 
+          csvFileName={csvFileName} 
+          onReset={handleReset} 
+          onUpdateConfig={setConfig}
+        />
       </main>
     );
   }

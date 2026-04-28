@@ -4,12 +4,14 @@ import { useState, useMemo } from 'react';
 import { AnalysisNode, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
 import SpendChart from './SpendChart';
 import ChatAssistant from './ChatAssistant';
+import BudgetCalculator from './BudgetCalculator';
 
 interface DashboardProps {
   analysis: BulkAnalysisResult;
   config: CampaignContext;
   csvFileName: string;
   onReset: () => void;
+  onUpdateConfig: (newConfig: CampaignContext) => void;
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -20,7 +22,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   general: '📋',
 };
 
-export default function Dashboard({ analysis, config, csvFileName, onReset }: DashboardProps) {
+export default function Dashboard({ analysis, config, csvFileName, onReset, onUpdateConfig }: DashboardProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string>('executive_summary');
   
   // Flat list of all nodes for easy selection
@@ -37,7 +39,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
   }, [analysis.nodes]);
 
   const currentNode = useMemo(() => {
-    if (selectedNodeId === 'executive_summary') return null;
+    if (selectedNodeId === 'executive_summary' || selectedNodeId === 'budget_planner') return null;
     return allNodes.find(n => n.id === selectedNodeId) || allNodes[0];
   }, [allNodes, selectedNodeId]);
 
@@ -291,68 +293,99 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
           </div>
         </div>
 
-        <div className="dashboard-grid">
-          <div className="card">
-            <div className="card-header"><span className="card-title">Daily Trend</span></div>
-            <div className="card-body">
-              <div className="chart-container">
-                <SpendChart data={daily_data} currency={config.currency} kpiName={kpi_performance.kpi_name} />
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-header"><span className="card-title">Metric Breakdown</span></div>
-            <div className="card-body">
-              <table className="data-table">
-                <thead>
-                  <tr><th>Metric</th><th style={{ textAlign: 'right' }}>Value</th></tr>
-                </thead>
-                <tbody>
-                  {Object.entries(kpi_performance.secondary_metrics).map(([key, val]) => (
-                    <tr key={key}><td>{key}</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{typeof val === 'number' ? val.toLocaleString() : val}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
 
-        {pacing_recommendations.length > 0 && (
-          <div className="card" style={{ marginTop: 24 }}>
-            <div className="card-header">
-              <span className="card-title">⚡ Strategy Recommendations</span>
-              <span className="badge badge-info">{pacing_recommendations.length} total</span>
-            </div>
-            <div className="card-body">
-              {pacing_recommendations.map((rec, i) => (
-                <div className="rec-item" key={i}>
-                  <div className="rec-number">{CATEGORY_ICONS[rec.category || 'general']}</div>
-                  <div style={{ flex: 1 }}>
-                    <div className="rec-action">{rec.action}</div>
-                    <div className="rec-reason">{rec.reason}</div>
-                  </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: 24, marginTop: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {pacing_recommendations.length > 0 && (
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">⚡ Strategy Recommendations</span>
+                  <span className="badge badge-info">{pacing_recommendations.length} total</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+                <div className="card-body">
+                  {pacing_recommendations.map((rec, i) => (
+                    <div className="rec-item" key={i}>
+                      <div className="rec-number">{CATEGORY_ICONS[rec.category || 'general']}</div>
+                      <div style={{ flex: 1 }}>
+                        <div className="rec-action">{rec.action}</div>
+                        <div className="rec-reason">{rec.reason}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {risks.length > 0 && (
-          <div className="card" style={{ marginTop: 24 }}>
-            <div className="card-header"><span className="card-title">⚠️ Identified Risks</span></div>
-            <div className="card-body">
-              {risks.map((risk, i) => (
-                <div className="risk-item" key={i}>
-                  <div className={`risk-dot ${risk.severity}`} />
-                  <div>
-                    <div className="risk-title">{risk.title}</div>
-                    <div className="risk-desc">{risk.description}</div>
-                  </div>
+            {risks.length > 0 && (
+              <div className="card">
+                <div className="card-header"><span className="card-title">⚠️ Identified Risks</span></div>
+                <div className="card-body">
+                  {risks.map((risk, i) => (
+                    <div className="risk-item" key={i}>
+                      <div className={`risk-dot ${risk.severity}`} />
+                      <div>
+                        <div className="risk-title">{risk.title}</div>
+                        <div className="risk-desc">{risk.description}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
-        )}
+          
+          <div style={{ position: 'sticky', top: 24 }}>
+            <BudgetCalculator 
+              currency={config.currency}
+              initialData={{
+                name: currentNode.name,
+                totalBudget: pacing.expected_spend / (pacing.elapsed_days / pacing.total_days),
+                currentSpend: pacing.actual_spend,
+                startDate: config.start_date,
+                endDate: config.end_date
+              }}
+              onApply={(newDaily) => {
+                const id = currentNode.id;
+                onUpdateConfig({
+                  ...config,
+                  ad_set_budgets: {
+                    ...config.ad_set_budgets,
+                    [id]: newDaily * 30.42 // Convert back to monthly for the config if needed, or update the specific budget
+                  }
+                });
+                alert(`Updated budget for ${currentNode.name} to ${config.currency}${newDaily.toFixed(2)}/day`);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBudgetPlanner = () => {
+    return (
+      <div className="fade-in">
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: '-0.04em', marginBottom: 8 }}>Budget Planner</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>
+            Plan your monthly allocations and calculate recovery strategies for underspending accounts.
+          </p>
+        </div>
+        <div style={{ maxWidth: 600 }}>
+          <BudgetCalculator 
+            currency={config.currency} 
+            initialData={{
+              totalBudget: config.total_budget,
+              startDate: config.start_date,
+              endDate: config.end_date,
+            }}
+            onApply={(newDaily) => {
+              alert(`Recommended daily budget of ${config.currency}${newDaily.toFixed(2)} calculated.`);
+            }}
+          />
+        </div>
       </div>
     );
   };
@@ -381,6 +414,22 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
               <div style={{ fontSize: 18 }}>📊</div>
               <div style={{ fontWeight: selectedNodeId === 'executive_summary' ? 800 : 600, fontSize: 13 }}>Executive Summary</div>
             </div>
+            <div
+              onClick={() => setSelectedNodeId('budget_planner')}
+              style={{
+                padding: '16px 20px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                borderBottom: '1px solid var(--border-light)',
+                background: selectedNodeId === 'budget_planner' ? 'var(--bg-card-hover)' : 'transparent',
+                borderLeft: selectedNodeId === 'budget_planner' ? '4px solid var(--brand-orange)' : '4px solid transparent',
+              }}
+            >
+              <div style={{ fontSize: 18 }}>💰</div>
+              <div style={{ fontWeight: selectedNodeId === 'budget_planner' ? 800 : 600, fontSize: 13 }}>Budget Planner</div>
+            </div>
             {analysis.nodes.map(node => renderSidebarNode(node))}
           </div>
         </div>
@@ -390,7 +439,9 @@ export default function Dashboard({ analysis, config, csvFileName, onReset }: Da
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        {selectedNodeId === 'executive_summary' ? renderExecutiveSummary() : renderAccountDetail()}
+        {selectedNodeId === 'executive_summary' ? renderExecutiveSummary() : 
+         selectedNodeId === 'budget_planner' ? renderBudgetPlanner() :
+         renderAccountDetail()}
       </div>
       
       <ChatAssistant analysis={analysis} config={config} currentNode={currentNode || (allNodes[0] as any)} />
