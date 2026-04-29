@@ -293,10 +293,33 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
           </div>
         </div>
 
+        <div className="dashboard-grid" style={{ marginBottom: 24 }}>
+          <div className="card">
+            <div className="card-header"><span className="card-title">Daily Trend</span></div>
+            <div className="card-body">
+              <div className="chart-container">
+                <SpendChart data={daily_data} currency={config.currency} kpiName={kpi_performance.kpi_name} />
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-header"><span className="card-title">Metric Breakdown</span></div>
+            <div className="card-body">
+              <table className="data-table">
+                <thead>
+                  <tr><th>Metric</th><th style={{ textAlign: 'right' }}>Value</th></tr>
+                </thead>
+                <tbody>
+                  {Object.entries(kpi_performance.secondary_metrics).map(([key, val]) => (
+                    <tr key={key}><td>{key}</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{typeof val === 'number' ? val.toLocaleString() : val}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: 24, marginTop: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: 24 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {pacing_recommendations.length > 0 && (
               <div className="card">
@@ -352,15 +375,15 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
                   ...config,
                   ad_set_budgets: {
                     ...config.ad_set_budgets,
-                    [id]: newDaily * 30.42 // Convert back to monthly for the config if needed, or update the specific budget
+                    [id]: newDaily * 30.42
                   }
                 });
                 alert(`Updated budget for ${currentNode.name} to ${config.currency}${newDaily.toFixed(2)}/day`);
               }}
             />
-          </div>
         </div>
       </div>
+    </div>
     );
   };
 
@@ -374,8 +397,8 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
           </p>
         </div>
         <div style={{ maxWidth: 600 }}>
-          <BudgetCalculator 
-            currency={config.currency} 
+          <BudgetCalculator
+            currency={config.currency}
             initialData={{
               totalBudget: config.total_budget,
               startDate: config.start_date,
@@ -389,6 +412,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
       </div>
     );
   };
+
 
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>

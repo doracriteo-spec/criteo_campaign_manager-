@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-import Header from "./components/Header";
+import Shell from "./components/Shell";
 
 export const metadata: Metadata = {
   title: "Campaign Manager — Performance Analytics",
@@ -12,10 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <div className="app-container">
-          <Header />
+        <Shell>
           {children}
-        </div>
+        </Shell>
       </body>
     </html>
   );

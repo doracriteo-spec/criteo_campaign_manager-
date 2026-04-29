@@ -431,3 +431,112 @@ body {
   .stats-grid { grid-template-columns: 1fr; }
   .stat-value { font-size: 22px; }
 }
+/* Sidebar Layout */
+.app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: calc(100vh - 64px);
+}
+
+.sidebar {
+  background: #fff;
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 64px;
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  border-left: 3px solid transparent;
+}
+
+.nav-item:hover {
+  background: var(--bg-primary);
+  color: var(--brand-orange);
+}
+
+.nav-item.active {
+  background: var(--bg-card-hover);
+  color: var(--brand-orange);
+  border-left-color: var(--brand-orange);
+  font-weight: 600;
+}
+
+.nav-section-title {
+  padding: 16px 24px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Enhanced Table */
+.data-table-container {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.data-table thead th {
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Pacing Badge Overrides */
+.pacing-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pacing-chip.on-track { background: rgba(16,185,129,0.1); color: #059669; }
+.pacing-chip.under { background: rgba(245,158,11,0.1); color: #D97706; }
+.pacing-chip.critical-under { background: rgba(239,68,68,0.1); color: #DC2626; }
+.pacing-chip.over { background: rgba(245,158,11,0.1); color: #D97706; }
+.pacing-chip.critical-over { background: rgba(239,68,68,0.1); color: #DC2626; }
+
+/* Breadcrumb */
+.breadcrumb-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--brand-orange);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0;
+}
+
+.breadcrumb-btn:hover { text-decoration: underline; }
+
+/* Responsive adjustments for sidebar */
+@media (max-width: 1024px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}
