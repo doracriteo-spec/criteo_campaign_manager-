@@ -47,6 +47,22 @@ export default function LoginPage() {
     setLoading(false);
   };
 
+  const handleGuest = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        setMessage(error.message);
+      } else {
+        router.replace('/portfolios');
+      }
+    } catch (err) {
+      setMessage('Guest login failed. Please try again.');
+    }
+    setLoading(false);
+  };
+
   return (
     <main className="main-content fade-in" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -126,6 +142,26 @@ export default function LoginPage() {
               disabled={loading}
             >
               {loading ? 'Loading…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '8px 0' }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }}></div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>OR</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }}></div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleGuest}
+              style={{ width: '100%', justifyContent: 'center', padding: '12px 16px', fontSize: 15 }}
+              disabled={loading}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 8 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Continue as Guest
             </button>
           </form>
 
