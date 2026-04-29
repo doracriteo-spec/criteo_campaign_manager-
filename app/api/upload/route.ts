@@ -33,11 +33,12 @@ export async function POST(req: NextRequest) {
   const { client: supabase, userId } = auth;
 
   const body = await req.json();
-  const { portfolioId, rows, columnMap: providedMap, filename } = body as {
+  const { portfolioId, rows, columnMap: providedMap, filename, budgetOverrides = {} } = body as {
     portfolioId: string;
     rows: UploadRow[];
     columnMap?: Partial<ColumnMap>;
     filename?: string;
+    budgetOverrides?: Record<string, number>;
   };
 
   if (!portfolioId) return NextResponse.json({ error: 'portfolioId required' }, { status: 400 });
@@ -183,7 +184,10 @@ export async function POST(req: NextRequest) {
         if (existingAs) {
           adSetId = existingAs.id;
         } else {
-          const adSetBudget = colMap.budget ? parseNum(g(row, colMap.budget)) : 0;
+          const csvBudget = colMap.budget ? parseNum(g(row, colMap.budget)) : 0;
+          // Manual override key matches campaign||adset format sent from client
+          const overrideKey = `${String(g(row, colMap.campaign) || 'Unknown Campaign').trim()}||${adSetName}`;
+          const adSetBudget = budgetOverrides[overrideKey] ?? csvBudget;
           const { data: created, error: asErr } = await supabase
             .from('ad_sets')
             .insert({

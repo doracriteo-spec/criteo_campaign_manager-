@@ -53,6 +53,21 @@ export default function PortfolioDashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const handleDeleteAccount = async (id: string) => {
+    setDeletingAccountId(id);
+    const res = await authFetch(`/api/accounts/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setPortfolio(prev => prev ? {
+        ...prev,
+        accounts: prev.accounts.filter(a => a.id !== id),
+      } : null);
+    }
+    setDeletingAccountId(null);
+    setConfirmDelete(null);
+  };
 
   const fetchPortfolio = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -78,6 +93,37 @@ export default function PortfolioDashboard() {
   }
 
   if (!portfolio) return null;
+
+  /* ── Delete Confirmation Modal ───────────────────────────────────── */
+  const DeleteModal = confirmDelete ? (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 300,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }}>
+      <div className="card fade-in" style={{ width: '100%', maxWidth: 420, padding: 0 }}>
+        <div className="card-header" style={{ borderBottom: '1px solid var(--border)' }}>
+          <span className="card-title" style={{ color: 'var(--danger)' }}>⚠ Delete Account</span>
+        </div>
+        <div className="card-body">
+          <p style={{ fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+            Are you sure you want to delete <strong>&ldquo;{confirmDelete.name}&rdquo;</strong>?<br />
+            This will permanently remove all associated campaigns, ad sets, daily metrics, notes, and budget data. This action cannot be undone.
+          </p>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              className="btn"
+              style={{ flex: 1, justifyContent: 'center', background: 'var(--danger)', color: '#fff', border: 'none' }}
+              disabled={deletingAccountId === confirmDelete.id}
+              onClick={() => handleDeleteAccount(confirmDelete.id)}
+            >
+              {deletingAccountId === confirmDelete.id ? 'Deleting…' : 'Yes, Delete Account'}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const accounts = portfolio.accounts || [];
   const accountStats = accounts.map(a => ({ account: a, ...deriveAccountStats(a) }));
@@ -139,6 +185,7 @@ export default function PortfolioDashboard() {
 
   return (
     <main className="main-content fade-in">
+      {DeleteModal}
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, fontSize: 13, color: 'var(--text-muted)' }}>
         <button onClick={() => router.push('/portfolios')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-orange)', fontWeight: 600, fontSize: 13, padding: 0 }}>
@@ -289,6 +336,7 @@ export default function PortfolioDashboard() {
                   <th style={{ textAlign: 'right' }}>Remaining</th>
                   <th style={{ textAlign: 'center' }}>Pacing</th>
                   <th style={{ textAlign: 'center' }}>Status</th>
+                  <th style={{ textAlign: 'center' }}></th>
                   <th></th>
                 </tr>
               </thead>
@@ -319,6 +367,21 @@ export default function PortfolioDashboard() {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <span className={`badge ${badgeCls}`}>{pacing.status}</span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); setConfirmDelete({ id: account.id, name: account.name }); }}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'var(--text-muted)', padding: '4px 8px', borderRadius: 6,
+                            fontSize: 14, transition: 'color 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+                          title="Delete account"
+                        >
+                          🗑
+                        </button>
                       </td>
                       <td style={{ paddingRight: 16 }}>
                         <span style={{ color: 'var(--brand-orange)', fontSize: 13 }}>→</span>

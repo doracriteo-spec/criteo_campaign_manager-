@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import Shell from "./components/Shell";
+import AIInsightsPanel from "./components/AIInsightsPanel";
 
 export const metadata: Metadata = {
   title: "Campaign Manager — Performance Analytics",
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Shell>
           {children}
         </Shell>
+        <AIInsightsPanel />
       </body>
     </html>
   );
