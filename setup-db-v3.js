@@ -22,6 +22,19 @@ async function run() {
     await client.connect();
     console.log('✓ Connected to Supabase PostgreSQL');
 
+    // ── Clean slate migration ────────────────────────────────────────────────
+    await client.query(`
+      DROP TABLE IF EXISTS upload_batches CASCADE;
+      DROP TABLE IF EXISTS account_notes CASCADE;
+      DROP TABLE IF EXISTS budget_allocations CASCADE;
+      DROP TABLE IF EXISTS daily_metrics CASCADE;
+      DROP TABLE IF EXISTS ad_sets CASCADE;
+      DROP TABLE IF EXISTS campaigns CASCADE;
+      DROP TABLE IF EXISTS accounts CASCADE;
+      DROP TABLE IF EXISTS portfolios CASCADE;
+    `);
+    console.log('✓ Old tables dropped');
+
     // ── Core entity tables ──────────────────────────────────────────────────
 
     await client.query(`

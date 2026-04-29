@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabase';
+import { getAuthenticatedClient } from '../../../lib/supabase-server';
 import { autoDetectColumns, parseNum, parseDate } from '../../../lib/analytics';
 
 interface UploadRow {
@@ -28,8 +28,9 @@ interface ColumnMap {
 }
 
 export async function POST(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client: supabase, userId } = auth;
 
   const body = await req.json();
   const { portfolioId, rows, columnMap: providedMap, filename } = body as {
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     .from('portfolios')
     .select('id')
     .eq('id', portfolioId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .single();
 
   if (portErr || !portfolio) {
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   const { data: batch, error: batchErr } = await supabase
     .from('upload_batches')
     .insert({
-      user_id: session.user.id,
+      user_id: userId,
       portfolio_id: portfolioId,
       filename: filename || 'upload.csv',
       row_count: rows.length,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
           .from('accounts')
           .select('id')
           .eq('portfolio_id', portfolioId)
-          .eq('user_id', session.user.id)
+          .eq('user_id', userId)
           .ilike('name', accountName)
           .maybeSingle();
 
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
             .from('accounts')
             .insert({
               portfolio_id: portfolioId,
-              user_id: session.user.id,
+              user_id: userId,
               name: accountName,
               currency: 'USD',
             })
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
             .insert({
               account_id: accountId,
               portfolio_id: portfolioId,
-              user_id: session.user.id,
+              user_id: userId,
               name: campaignName,
               external_id: campaignExtId || null,
             })
@@ -189,7 +190,7 @@ export async function POST(req: NextRequest) {
               campaign_id: campaignId,
               account_id: accountId,
               portfolio_id: portfolioId,
-              user_id: session.user.id,
+              user_id: userId,
               name: adSetName,
               external_id: adSetExtId || null,
               budget: adSetBudget || null,
@@ -231,7 +232,7 @@ export async function POST(req: NextRequest) {
         campaign_id: campaignId,
         account_id: accountId,
         portfolio_id: portfolioId,
-        user_id: session.user.id,
+        user_id: userId,
         date: rowDate,
         spend, budget, impressions, clicks, ctr,
         conversions, revenue, roas, cpo, visits, cac, cpv,

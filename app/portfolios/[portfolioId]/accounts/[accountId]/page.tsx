@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../../lib/supabase';
+import { authFetch } from '../../../../../lib/auth-fetch';
 import { calculatePacing, getPacingColor } from '../../../../../lib/analytics';
 import { Line } from 'react-chartjs-2';
 import {
@@ -62,7 +63,7 @@ export default function AccountDashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
-    const res = await fetch(`/api/accounts/${accountId}`);
+    const res = await authFetch(`/api/accounts/${accountId}`);
     if (res.ok) {
       setAccount(await res.json());
     } else {

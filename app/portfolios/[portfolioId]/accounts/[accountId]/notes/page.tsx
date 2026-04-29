@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { authFetch } from '../../../../../../lib/auth-fetch';
 
 interface Note {
   id: string;
@@ -29,7 +30,7 @@ export default function NotesPage() {
   const [newDueDate, setNewDueDate] = useState('');
 
   const fetchNotes = useCallback(async () => {
-    const res = await fetch(`/api/notes?accountId=${accountId}`);
+    const res = await authFetch(`/api/notes?accountId=${accountId}`);
     if (res.ok) {
       setNotes(await res.json());
     }
@@ -42,9 +43,8 @@ export default function NotesPage() {
     e.preventDefault();
     if (!newContent.trim()) return;
 
-    const res = await fetch('/api/notes', {
+    const res = await authFetch('/api/notes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         account_id: accountId,
         portfolio_id: portfolioId,
@@ -67,9 +67,8 @@ export default function NotesPage() {
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
-    const res = await fetch('/api/notes', {
+    const res = await authFetch('/api/notes', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status: newStatus }),
     });
 
@@ -80,7 +79,7 @@ export default function NotesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this note?')) return;
-    const res = await fetch(`/api/notes?id=${id}`, { method: 'DELETE' });
+    const res = await authFetch(`/api/notes?id=${id}`, { method: 'DELETE' });
     if (res.ok) {
       setNotes(notes.filter(n => n.id !== id));
     }

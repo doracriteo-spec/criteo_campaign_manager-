@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Papa from 'papaparse';
 import { autoDetectColumns, COLUMN_PATTERNS } from '../../../../lib/analytics';
+import { authFetch } from '../../../../lib/auth-fetch';
 
 const REQUIRED_FIELDS = ['date', 'spend'];
 const IMPORTANT_FIELDS = ['advertiser', 'campaign', 'ad_set'];
@@ -70,9 +71,8 @@ export default function UploadPage() {
     setStep('uploading');
 
     try {
-      const res = await fetch('/api/upload', {
+      const res = await authFetch('/api/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ portfolioId, rows, columnMap: colMap, filename }),
       });
       const data = await res.json();

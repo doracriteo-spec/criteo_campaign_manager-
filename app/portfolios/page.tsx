@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
+import { authFetch } from '../../lib/auth-fetch';
 
 interface Portfolio {
   id: string;
@@ -27,7 +28,7 @@ export default function PortfoliosPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
-    const res = await fetch('/api/portfolios');
+    const res = await authFetch('/api/portfolios');
     if (res.ok) {
       const data = await res.json();
       setPortfolios(data);
@@ -43,9 +44,8 @@ export default function PortfoliosPage() {
     setCreating(true);
     setError('');
 
-    const res = await fetch('/api/portfolios', {
+    const res = await authFetch('/api/portfolios', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() }),
     });
 
@@ -65,7 +65,7 @@ export default function PortfoliosPage() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete portfolio "${name}"? This will remove all accounts and data inside it.`)) return;
     setDeletingId(id);
-    await fetch(`/api/portfolios/${id}`, { method: 'DELETE' });
+    await authFetch(`/api/portfolios/${id}`, { method: 'DELETE' });
     setPortfolios(prev => prev.filter(p => p.id !== id));
     setDeletingId(null);
   };

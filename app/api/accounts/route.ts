@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabase';
+import { getAuthenticatedClient } from '../../../lib/supabase-server';
 
 export async function GET(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const portfolioId = req.nextUrl.searchParams.get('portfolioId');
-  let query = supabase
+  let query = client
     .from('accounts')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .order('name');
 
   if (portfolioId) query = query.eq('portfolio_id', portfolioId);
@@ -20,8 +21,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const body = await req.json();
   const { portfolio_id, name, global_account, market, owner_as, currency,
@@ -31,11 +33,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'portfolio_id and name are required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('accounts')
     .upsert({
       portfolio_id,
-      user_id: session.user.id,
+      user_id: userId,
       name: name.trim(),
       global_account, market, owner_as,
       currency: currency || 'USD',

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
+import { authFetch } from '../../../lib/auth-fetch';
 import { calculatePacing, getPacingColor, PacingResult } from '../../../lib/analytics';
 import { Line, Bar } from 'react-chartjs-2';
 import {
@@ -57,7 +58,7 @@ export default function PortfolioDashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
-    const res = await fetch(`/api/portfolios/${portfolioId}`);
+    const res = await authFetch(`/api/portfolios/${portfolioId}`);
     if (res.ok) {
       setPortfolio(await res.json());
     } else {

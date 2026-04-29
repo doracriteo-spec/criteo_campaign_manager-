@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../../lib/supabase';
+import { getAuthenticatedClient } from '../../../../lib/supabase-server';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('portfolios')
     .select(`
       *,
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       )
     `)
     .eq('id', id)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
@@ -26,15 +27,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const body = await req.json();
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('portfolios')
     .update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .select()
     .single();
 
@@ -44,14 +46,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
-  const { error } = await supabase
+  const { error } = await client
     .from('portfolios')
     .delete()
     .eq('id', id)
-    .eq('user_id', session.user.id);
+    .eq('user_id', userId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });

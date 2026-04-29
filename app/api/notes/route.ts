@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabase';
+import { getAuthenticatedClient } from '../../../lib/supabase-server';
 
 export async function GET(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const accountId = req.nextUrl.searchParams.get('accountId');
   if (!accountId) return NextResponse.json({ error: 'accountId required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('account_notes')
     .select('*')
     .eq('account_id', accountId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -20,8 +21,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const body = await req.json();
   const { account_id, portfolio_id, content, type, owner, status, due_date } = body;
@@ -30,12 +32,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'account_id and content required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('account_notes')
     .insert({
       account_id,
       portfolio_id,
-      user_id: session.user.id,
+      user_id: userId,
       content: content.trim(),
       type: type || 'note',
       owner,
@@ -50,18 +52,19 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const body = await req.json();
   const { id, ...updates } = body;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('account_notes')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .select()
     .single();
 
@@ -70,17 +73,18 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const id = req.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  const { error } = await supabase
+  const { error } = await client
     .from('account_notes')
     .delete()
     .eq('id', id)
-    .eq('user_id', session.user.id);
+    .eq('user_id', userId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });

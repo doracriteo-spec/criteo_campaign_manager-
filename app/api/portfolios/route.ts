@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabase';
+import { getAuthenticatedClient } from '../../../lib/supabase-server';
 
 export async function GET(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('portfolios')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -16,8 +17,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedClient(req);
+  if (auth.error) return auth.error;
+  const { client, userId } = auth;
 
   const body = await req.json();
   const { name, description } = body;
@@ -26,9 +28,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Portfolio name is required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('portfolios')
-    .insert({ user_id: session.user.id, name: name.trim(), description })
+    .insert({ user_id: userId, name: name.trim(), description })
     .select()
     .single();
 
