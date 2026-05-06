@@ -136,7 +136,7 @@ export default function AIInsightsPanel() {
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>AI Campaign Analyst</div>
-              <div style={{ fontSize: 11, opacity: 0.8 }}>Powered by Claude · Context-aware</div>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Powered by Glean · Context-aware</span>
             </div>
           </div>
 

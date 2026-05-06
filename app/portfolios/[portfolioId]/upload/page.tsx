@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
+import { supabase } from '../../../../../lib/supabase';
 
 export default function UploadPage() {
   const router = useRouter();
@@ -13,7 +16,6 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const [filename, setFilename] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,57 +41,65 @@ export default function UploadPage() {
     setStep('uploading');
     setError(null);
     
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('portfolioId', portfolioId);
-
     try {
+      // 1. Get Auth Token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // 2. Parse file locally
+      let rows: any[] = [];
+      const ext = file.name.split('.').pop()?.toLowerCase();
+
+      if (ext === 'csv') {
+        rows = await new Promise((resolve, reject) => {
+          Papa.parse(file, {
+            header: true, skipEmptyLines: true, dynamicTyping: true,
+            complete: (results) => resolve(results.data),
+            error: (err) => reject(err)
+          });
+        });
+      } else {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      }
+
+      if (!rows || rows.length === 0) {
+        throw new Error('No data found in file');
+      }
+
+      setStep('processing');
+
+      // 3. Upload rows as JSON
       const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
         headers: {
-          'x-user-id': '00000000-0000-0000-0000-000000000000' // Stub or real auth
-        }
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          portfolioId,
+          rows,
+          filename: file.name
+        })
       });
+
+      const data = await res.json();
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Upload failed');
       }
-      const data = await res.json();
-      setJobId(data.jobId);
-      setStep('processing');
+
+      // Backend processes synchronously for now and returns summary
+      setJobStatus(data.summary);
+      setStep('done');
     } catch (err: any) {
       setError(err.message || 'Upload error');
       setStep('drop');
     }
   };
-
-  // Poll for job status
-  useEffect(() => {
-    if (step !== 'processing' || !jobId) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/upload/status?jobId=${jobId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setJobStatus(data.job);
-          if (data.job.status === 'completed' || data.job.status === 'done') {
-            clearInterval(interval);
-            setStep('done');
-          } else if (data.job.status === 'error') {
-            clearInterval(interval);
-            setError(data.job.error_message || 'Processing failed');
-            setStep('drop');
-          }
-        }
-      } catch (err) {
-        // ignore fetch errors and keep trying
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [step, jobId]);
 
   const STEPS = ['Select File', 'Upload', 'Process', 'Done'];
   const stepIdx = step === 'drop' ? 0 : step === 'uploading' ? 1 : step === 'processing' ? 2 : 3;
@@ -185,18 +195,13 @@ export default function UploadPage() {
           <div className="card fade-in" style={{ textAlign: 'center', padding: '80px 40px' }}>
             <div className="loading-spinner" style={{ margin: '0 auto 24px', width: 40, height: 40, borderWidth: 4 }} />
             <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-              {step === 'uploading' ? 'Uploading file...' : 'Processing workbook...'}
+              {step === 'uploading' ? 'Parsing file...' : 'Ingesting data...'}
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>
               {step === 'uploading' 
-                ? 'Sending file to the server.' 
-                : `Extracting sheets, normalizing schemas, and applying updates (Job ${jobId?.substring(0, 8)}).`}
+                ? 'Extracting sheets and normalizing schemas locally.' 
+                : `Uploading to the server and applying structural updates.`}
             </p>
-            {jobStatus && (
-              <div style={{ marginTop: 24, fontSize: 14, color: 'var(--text-muted)' }}>
-                Progress: {jobStatus.progress || 0}%
-              </div>
-            )}
           </div>
         )}
 
@@ -209,11 +214,22 @@ export default function UploadPage() {
             <p style={{ color: 'var(--text-secondary)', fontSize: 16, marginBottom: 32 }}>
               Your campaign tracker has been successfully imported and processed.
             </p>
+            {jobStatus && (
+              <div style={{ background: 'var(--bg-primary)', padding: 16, borderRadius: 12, marginBottom: 32, display: 'inline-block', textAlign: 'left' }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Import Summary:</div>
+                <ul style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, paddingLeft: 20 }}>
+                  <li>{jobStatus.rowsProcessed || 0} rows processed</li>
+                  <li>{jobStatus.accountsCreated || 0} new accounts</li>
+                  <li>{jobStatus.campaignsCreated || 0} new campaigns</li>
+                  <li>{jobStatus.adSetsCreated || 0} new ad sets</li>
+                </ul>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
               <button className="btn btn-primary" onClick={() => router.push(`/portfolios/${portfolioId}`)}>
                 Go to Dashboard
               </button>
-              <button className="btn btn-secondary" onClick={() => { setStep('drop'); setFile(null); setJobId(null); setJobStatus(null); }}>
+              <button className="btn btn-secondary" onClick={() => { setStep('drop'); setFile(null); setJobStatus(null); }}>
                 Upload Another
               </button>
             </div>
