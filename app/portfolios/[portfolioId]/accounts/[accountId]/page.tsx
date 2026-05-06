@@ -167,6 +167,7 @@ export default function AccountDashboard() {
             🛵 GoJek Module
           </button>
         </div>
+        </div>
       </div>
 
       {/* KPI cards */}
