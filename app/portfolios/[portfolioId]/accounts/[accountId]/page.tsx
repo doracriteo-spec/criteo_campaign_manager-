@@ -150,7 +150,22 @@ export default function AccountDashboard() {
               {account.owner_as && <span>👤 {account.owner_as}</span>}
               {account.global_account && <span>🏢 {account.global_account}</span>}
             </div>
-          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button 
+            className="btn btn-secondary" 
+            style={{ color: '#ee4d2d', borderColor: '#ee4d2d', background: 'rgba(238,77,45,0.05)' }}
+            onClick={() => router.push(`/portfolios/${portfolioId}/accounts/${accountId}/shopee`)}
+          >
+            🛒 Shopee Module
+          </button>
+          <button 
+            className="btn btn-secondary" 
+            style={{ color: '#00aa5b', borderColor: '#00aa5b', background: 'rgba(0,170,91,0.05)' }}
+            onClick={() => router.push(`/portfolios/${portfolioId}/accounts/${accountId}/gojek`)}
+          >
+            🛵 GoJek Module
+          </button>
         </div>
       </div>
 

@@ -1,34 +1,15 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { streamText } from 'ai';
 import { getAuthenticatedClient } from '../../../lib/supabase-server';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { chatWithGleanAgent, GleanMessage } from '../../../lib/glean';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const SYSTEM_PROMPT = `You are an expert Performance Marketing Analyst and Campaign Manager assistant embedded in a portfolio pacing dashboard. Your role is to analyze campaign data and provide sharp, actionable insights.
-
-Your capabilities include:
-- Identifying under-pacing and over-pacing ad sets and suggesting specific budget reallocations
-- Detecting anomalies in daily spend trends (e.g., sudden drops or spikes)
-- Answering natural language questions like "Which accounts are likely to overspend by end of month?"
-- Recommending bid strategy adjustments based on pacing ratios
-- Summarizing portfolio health in clear, concise bullet points
-- Flagging accounts that need immediate attention
-
-Rules:
-- Always reference specific account/campaign names from the context when available
-- Quantify recommendations (e.g., "Increase budget by $X/day" not just "increase budget")
-- Use marketing terminology correctly (CPM, CPC, ROAS, CTR, pacing ratio, etc.)
-- Keep answers focused and actionable — avoid generic advice
-- If context data is missing, ask the user to navigate to the relevant account first
-- Format important numbers in bold using markdown
-
-You are embedded in the Criteo Campaign Pacing Platform. Only answer questions related to campaign management, pacing, budgeting, and performance marketing.`;
+const GLEAN_AGENT_ID = '029e132bac844e8baaf6cb20dea43213';
 
 export async function POST(req: NextRequest) {
-  // Attempt to get auth context (optional — AI can still respond without portfolio data)
   let portfolioContext = '';
+  
   try {
     const auth = await getAuthenticatedClient(req);
     if (!auth.error) {
@@ -63,27 +44,37 @@ export async function POST(req: NextRequest) {
     // Auth optional for AI chat
   }
 
-  const body = await req.json();
-  const { messages } = body;
-
-  const contextualSystem = portfolioContext
-    ? `${SYSTEM_PROMPT}\n\n--- LIVE PORTFOLIO DATA ---\n${portfolioContext}\n--- END DATA ---`
-    : SYSTEM_PROMPT;
-
   try {
-    const result = streamText({
-      model: anthropic('claude-3-5-haiku-20241022'),
-      system: contextualSystem,
-      messages,
-    });
+    const body = await req.json();
+    const { messages } = body; // Array of { role: 'user' | 'assistant', content: string }
+    
+    // Map standard messages to Glean format
+    const gleanMessages: GleanMessage[] = messages.map((m: any) => ({
+      author: m.role === 'user' ? 'USER' : 'AGENT',
+      text: m.content || m.text
+    }));
 
-    return result.toTextStreamResponse();
+    const responseData = await chatWithGleanAgent(
+      GLEAN_AGENT_ID,
+      gleanMessages,
+      portfolioContext
+    );
+
+    // Adapt Glean response format to typical OpenAI/AI SDK format for the frontend
+    // Assuming Glean returns { text: '...', ... } or { messages: [{ text: '...' }] }
+    let responseText = 'No response from Glean';
+    if (responseData && responseData.messages && responseData.messages.length > 0) {
+      responseText = responseData.messages[responseData.messages.length - 1].text;
+    } else if (responseData && responseData.text) {
+      responseText = responseData.text;
+    }
+
+    return NextResponse.json({ text: responseText, reply: responseText });
   } catch (err: any) {
-    // Fallback: if Anthropic key missing, return a helpful mock
-    console.error('AI Chat error:', err);
-    return new Response(
-      JSON.stringify({ error: 'AI service unavailable. Please set ANTHROPIC_API_KEY in your Vercel environment.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    console.error('Glean Chat error:', err);
+    return NextResponse.json(
+      { error: err.message || 'AI service unavailable' },
+      { status: 500 }
     );
   }
 }

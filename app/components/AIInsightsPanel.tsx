@@ -43,31 +43,12 @@ export default function AIInsightsPanel() {
         throw new Error(errData.error || `Server error ${res.status}`);
       }
 
-      // Read the text stream
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let assistantContent = '';
-
-      // Add placeholder for assistant message
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          assistantContent += chunk;
-          setMessages(prev => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: 'assistant', content: assistantContent };
-            return updated;
-          });
-        }
-      }
+      const data = await res.json();
+      const assistantContent = data.text || data.reply || 'No response from assistant.';
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
     } catch (err: any) {
       setError(err.message || 'Connection error');
-      // Remove the empty placeholder if added
-      setMessages(prev => prev[prev.length - 1]?.content === '' ? prev.slice(0, -1) : prev);
     }
     setIsLoading(false);
   };
