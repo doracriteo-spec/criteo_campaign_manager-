@@ -14,7 +14,13 @@ export async function chatWithGleanAgent(
   contextData?: string
 ) {
   if (!GLEAN_API_KEY) {
-    throw new Error('GLEAN_API_KEY is not configured');
+    console.warn('GLEAN_API_KEY is not configured. Returning mock response.');
+    return {
+      messages: [{
+        author: 'AGENT',
+        text: "I'm ready to help! However, I notice that the `GLEAN_API_KEY` is not currently configured in your environment variables. Please add it to your `.env.local` or Vercel project settings to enable my full analysis capabilities."
+      }]
+    };
   }
 
   // Construct the payload according to typical Glean agent chat API structure
