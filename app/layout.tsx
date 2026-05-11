@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 import Shell from "./components/Shell";
-import AIInsightsPanel from "./components/AIInsightsPanel";
+import GleanChatPanel from "./components/GleanChatPanel";
 
 export const metadata: Metadata = {
   title: "Campaign Manager — Performance Analytics",
@@ -12,11 +13,20 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/* Glean Web SDK — renders the Campaign Analyst agent */}
+        <Script
+          src="https://app.glean.com/embedded-search-latest.min.js"
+          strategy="afterInteractive"
+          defer
+        />
+      </head>
       <body>
         <Shell>
           {children}
         </Shell>
-        <AIInsightsPanel />
+        {/* Glean floating chat panel */}
+        <GleanChatPanel />
       </body>
     </html>
   );

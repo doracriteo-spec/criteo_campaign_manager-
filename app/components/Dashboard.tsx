@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react';
 import { AnalysisNode, BulkAnalysisResult, CampaignContext } from '../../lib/analyzer';
 import SpendChart from './SpendChart';
-import ChatAssistant from './ChatAssistant';
 import BudgetCalculator from './BudgetCalculator';
+import ChangeLogPanel, { createLogEntry, useChangeLog } from './ChangeLogPanel';
 
 interface DashboardProps {
   analysis: BulkAnalysisResult;
@@ -24,6 +24,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 export default function Dashboard({ analysis, config, csvFileName, onReset, onUpdateConfig }: DashboardProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string>('executive_summary');
+  const { saveEntry } = useChangeLog();
   
   // Flat list of all nodes for easy selection
   const allNodes = useMemo(() => {
@@ -359,7 +360,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
             )}
           </div>
           
-          <div style={{ position: 'sticky', top: 24 }}>
+          <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <BudgetCalculator 
               currency={config.currency}
               initialData={{
@@ -378,12 +379,23 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
                     [id]: newDaily * 30.42
                   }
                 });
+                // Auto-log the budget change with timestamp
+                saveEntry(createLogEntry(
+                  'budget_change',
+                  `Budget updated — ${currentNode.name}`,
+                  `Daily budget set to ${config.currency}${newDaily.toFixed(2)}/day (monthly: ${config.currency}${(newDaily * 30.42).toFixed(2)}).`,
+                  { 'Daily Rate': `${config.currency}${newDaily.toFixed(2)}`, 'Monthly Equiv.': `${config.currency}${(newDaily * 30.42).toFixed(2)}` }
+                ));
                 alert(`Updated budget for ${currentNode.name} to ${config.currency}${newDaily.toFixed(2)}/day`);
               }}
             />
+            <ChangeLogPanel
+              entityName={currentNode.name}
+              onLogEntry={(entry) => saveEntry(entry)}
+            />
+          </div>
         </div>
       </div>
-    </div>
     );
   };
 
@@ -416,6 +428,7 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
 
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+      {/* ── Left sidebar ── */}
       <div className="fade-in" style={{ width: 280, flexShrink: 0, position: 'sticky', top: 80 }}>
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="card-header" style={{ padding: '16px 20px' }}>
@@ -454,6 +467,22 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
               <div style={{ fontSize: 18 }}>💰</div>
               <div style={{ fontWeight: selectedNodeId === 'budget_planner' ? 800 : 600, fontSize: 13 }}>Budget Planner</div>
             </div>
+            <div
+              onClick={() => setSelectedNodeId('change_log')}
+              style={{
+                padding: '16px 20px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                borderBottom: '1px solid var(--border-light)',
+                background: selectedNodeId === 'change_log' ? 'var(--bg-card-hover)' : 'transparent',
+                borderLeft: selectedNodeId === 'change_log' ? '4px solid #6366f1' : '4px solid transparent',
+              }}
+            >
+              <div style={{ fontSize: 18 }}>📋</div>
+              <div style={{ fontWeight: selectedNodeId === 'change_log' ? 800 : 600, fontSize: 13, color: selectedNodeId === 'change_log' ? '#6366f1' : undefined }}>Change Log</div>
+            </div>
             {analysis.nodes.map(node => renderSidebarNode(node))}
           </div>
         </div>
@@ -462,13 +491,26 @@ export default function Dashboard({ analysis, config, csvFileName, onReset, onUp
         </button>
       </div>
 
+      {/* ── Main content ── */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {selectedNodeId === 'executive_summary' ? renderExecutiveSummary() : 
+        {selectedNodeId === 'executive_summary' ? renderExecutiveSummary() :
          selectedNodeId === 'budget_planner' ? renderBudgetPlanner() :
+         selectedNodeId === 'change_log' ? (
+           <div className="fade-in">
+             <div style={{ marginBottom: 28 }}>
+               <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-0.04em', marginBottom: 8 }}>Change Log & Notes</h1>
+               <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>
+                 Every note and change is automatically recorded with an exact date and time stamp.
+               </p>
+             </div>
+             <ChangeLogPanel
+               entityName={csvFileName}
+               onLogEntry={(entry) => console.log('New log entry:', entry)}
+             />
+           </div>
+         ) :
          renderAccountDetail()}
       </div>
-      
-      <ChatAssistant analysis={analysis} config={config} currentNode={currentNode || (allNodes[0] as any)} />
     </div>
   );
 }

@@ -125,7 +125,7 @@ export default function ChatAssistant({ analysis, config, currentNode }: ChatAss
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 14 }}>Campaign Assistant</div>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Powered by Glean · Context-aware</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>AI Analyst · Powered by Campaign Data</span>
             </div>
           </div>
           <button className="chat-close" onClick={() => setIsOpen(false)}>
