@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { supabase } from '../../../../lib/supabase';
+import { buildGleanContext, saveGleanContext } from '../../../../lib/glean-context';
+import { autoDetectColumns } from '../../../../lib/analytics';
 
 interface KpiGoal {
   metric: string;
@@ -101,6 +103,17 @@ export default function UploadPage() {
       }
 
       if (!rows || rows.length === 0) throw new Error('No data found in file');
+
+      // ── Build & save Glean context from parsed rows ──────────────────────
+      const headers = Object.keys(rows[0] || {});
+      const colMap = autoDetectColumns(headers);
+      const gleanCtx = buildGleanContext(
+        rows as Record<string, unknown>[],
+        file.name,
+        colMap
+      );
+      saveGleanContext(gleanCtx);
+      // ─────────────────────────────────────────────────────────────────────
 
       setStep('processing');
 

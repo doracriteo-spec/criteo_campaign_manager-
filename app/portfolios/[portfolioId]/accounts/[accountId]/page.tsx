@@ -212,12 +212,27 @@ export default function AccountDashboard() {
         <div className="stat-card" style={{ borderTop: '4px solid var(--brand-orange)' }}>
           <div className="stat-label">Total Spend</div>
           <div className="stat-value">{fmt(totalSpend)}</div>
-          <div className="stat-sub">{activeBudget > 0 ? `of ${fmt(activeBudget)} budget` : 'No budget set'}</div>
+          <div className="stat-sub">
+            {activeBudget > 0
+              ? (
+                <span>
+                  <strong style={{ color: 'var(--brand-orange)' }}>
+                    {((totalSpend / activeBudget) * 100).toFixed(1)}% of budget used
+                  </strong>
+                  {' '}· {fmt(activeBudget)} total
+                </span>
+              )
+              : 'Set a budget above to track %'}
+          </div>
         </div>
         <div className="stat-card" style={{ borderTop: `4px solid var(--${colorKey})` }}>
           <div className="stat-label">Pacing Status</div>
           <div className="stat-value" style={{ fontSize: 20 }}>{pacing.status}</div>
-          <div className="stat-sub">{activeBudget > 0 ? `${(pacing.ratio * 100).toFixed(1)}% of expected` : 'Set a budget above'}</div>
+          <div className="stat-sub">
+            {activeBudget > 0
+              ? `${(pacing.ratio * 100).toFixed(1)}% vs expected pace`
+              : 'Set a budget above'}
+          </div>
         </div>
         <div className="stat-card" style={{ borderTop: '4px solid #60a5fa' }}>
           <div className="stat-label">Daily Budget Required</div>

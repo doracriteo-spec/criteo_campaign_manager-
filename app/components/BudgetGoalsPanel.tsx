@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+
 import { useState } from 'react';
 import { Target, Save, RotateCcw } from 'lucide-react';
 
@@ -37,6 +39,9 @@ export function makeDefaultGoals(): BudgetGoals {
 
 export default function BudgetGoalsPanel({ initialGoals, onSave }: Props) {
   const [goals, setGoals] = useState<BudgetGoals>(initialGoals);
+
+  // Re-sync when parent feeds updated goals (e.g. after async localStorage load)
+  useEffect(() => { setGoals(initialGoals); }, [initialGoals]);
   const [saved, setSaved] = useState(false);
 
   const updateKpi = (i: number, val: string) => {
